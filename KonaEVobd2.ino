@@ -7,17 +7,12 @@
   * 
 */
 #include "SafeString.h"
-#include "BluetoothSerial.h"
 #include "ELMduino.h"
 #include "EEPROM.h"
 #include "Button.h"
 #include "TFT_eSPI.h"
-// #include "SPI.h"
-#include "WiFi.h"
-#include "WiFiMulti.h"
-#include "test.h"
-
-WiFiMulti wifiMulti;
+#include "BT_communication.h"
+#include "Wifi_connection.h"
 
 #define DEBUG_PORT Serial
 
@@ -66,11 +61,6 @@ int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255
 const int pwmFreq = 5000;
 const int pwmResolution = 8;
 const int pwmLedChannelTFT = 0;
-
-const char* ssid = "VIRGIN131";
-const char* password = "3D4F2F3311D5";
-const char* ssid2 = "SM-G950W2093";
-const char* password2 = "5311Fond";
 
 const int VESSoff = 12;
 boolean SelectOn = true;
@@ -152,8 +142,8 @@ bool initscan = false;
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
-bool interupt_read_data = false;
-int nbParam = 25;    //number of parameters to send to Google Sheet
+bool send_data = false;
+int nbParam = 23;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
@@ -194,6 +184,8 @@ void setup() {
   bouton.begin(); // left button
   bouton2.begin(); // right button
 
+  /*//////////////Initialise OLED display ////////////////*/
+
   pinMode(ADC_EN, OUTPUT);
   digitalWrite(ADC_EN, HIGH);
 
@@ -205,8 +197,7 @@ void setup() {
   Serial.print("Setting PWM for TFT backlight to default intensity... ");
   ledcWrite(pwmLedChannelTFT, ledBacklight);
   Serial.println("DONE");
-
-  /*//////////////Initialise OLED display ////////////////*/
+  
   tft.init(); // display initialisation
   tft.begin();
   tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
@@ -256,7 +247,11 @@ void setup() {
 /*/////////////////////////////////////////////////////////////////*/
 
   if (StartWifi){
-    initWifi();
+    //initWifi();
+    ConnectWifi(tft);
+    if (WiFi.status() == WL_CONNECTED) {
+      send_enabled = true;
+    }
   }
 
   initscan = true; // To write header name on Google Sheet on power up 
@@ -432,7 +427,7 @@ void makeIFTTTRequest() {
   while(client.available()){
     Serial.write(client.read());
   }
-  interupt_read_data = false;
+  send_data = false;
   
   Serial.println();
   Serial.println("closing connection");
@@ -1185,12 +1180,14 @@ void loop() {
 
   currentTimer = millis();  
   if ((currentTimer - previousTimer >= sendInterval) && send_enabled) {    
-    interupt_read_data = true;
+    //send_data = true;
     previousTimer = currentTimer;
   }
                
   /*/////// Read each OBDII PIDs with 100ms interval /////////////////*/
-                                   
+
+  read_data();
+  /*
   currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {   // 100ms timer
       
@@ -1198,7 +1195,7 @@ void loop() {
       
       read_data();  // Read Datas from OBD 
       }
-
+*/
   /*/////// Display Page Number /////////////////*/
   
   if(!SetupOn){
@@ -1221,9 +1218,9 @@ void loop() {
 
   /*/////// Send Data to Google Sheet /////////*/ 
   
-  if (send_enabled && interupt_read_data) {
+  if (send_enabled && send_data) {
         if (WiFi.status() != WL_CONNECTED) {            
-            interupt_read_data = false;
+            //send_data = false;
             send_enabled = false;       
         }        
         else
