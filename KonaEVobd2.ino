@@ -15,25 +15,25 @@
 // #include "SPI.h"
 #include "WiFi.h"
 #include "WiFiMulti.h"
-#include "test.h"
+
+BluetoothSerial SerialBT; //Object for Bluetooth
+
+ELM327 myELM327;    //Object for OBD2 device
 
 WiFiMulti wifiMulti;
 
-#define DEBUG_PORT Serial
-
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom display library
 
-#ifndef TFT_DISPOFF
-#define TFT_DISPOFF 0x28
-#endif
-
-#ifndef TFT_SLPIN
-#define TFT_SLPIN   0x10
-#endif
+#define ELM_PORT SerialBT
+#define DEBUG_PORT Serial
 
 #define TFT_BL  4  // Display backlight control pin
 #define ADC_EN  14  //ADC_EN is the ADC detection enable port
 #define ADC_PIN 34
+#define TFT_DISPOFF 0x28
+
+#define BUTTON_PIN  0
+#define BUTTON_2_PIN  35
 
 //TFT y positions for texts and numbers
 #define textLvl1 10            // y coordinates for text
@@ -44,9 +44,6 @@ TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom display library
 #define drawLvl2 100
 #define drawLvl3 160
 #define drawLvl4 220            // TTGO 135x240 TFT display
-
-#define BUTTON_PIN  0
-#define BUTTON_2_PIN  35
 
 Button bouton(BUTTON_PIN);
 Button bouton2(BUTTON_2_PIN);
@@ -61,11 +58,6 @@ Button bouton2(BUTTON_2_PIN);
 #define pagenumbers 7               // number of pages to display
 
 int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
-
-/*////// Setting PWM properties, do not change this! /////////*/
-const int pwmFreq = 5000;
-const int pwmResolution = 8;
-const int pwmLedChannelTFT = 0;
 
 const char* ssid = "VIRGIN131";
 const char* password = "3D4F2F3311D5";
@@ -148,6 +140,11 @@ bool SetupOn = false;
 bool StartWifi = true;
 bool initscan = false;
 
+/*////// Setting PWM properties, do not change this! /////////*/
+const int pwmFreq = 5000;
+const int pwmResolution = 8;
+const int pwmLedChannelTFT = 0;
+
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool interupt_read_data = false;
@@ -160,6 +157,7 @@ const char* resource = "/trigger/konaEv_readings/with/key/dqNCA93rEfn0CAeqkVRXvl
 
 // Maker Webhooks IFTTT
 const char* server = "maker.ifttt.com";
+
 
 /*////// Variables for OBD data timing ////////////*/
 const long interval = 100; // interval to update OBD data (milliseconds)
@@ -246,7 +244,55 @@ void setup() {
 /*                    CONNECTION TO OBDII                          */
 /*/////////////////////////////////////////////////////////////////*/
     
-  ConnectToOBD2(tft);
+  ELM_PORT.setPin("1234");
+  ELM_PORT.begin("ESP32", true);    
+  
+  tft.fillScreen(TFT_BLACK);
+  tft.drawString("Connecting", tft.width() / 2, tft.height() / 2 - 16);
+  tft.drawString("To", tft.width() / 2, tft.height() / 2);
+  tft.drawString("OBDII", tft.width() / 2, tft.height() / 2 + 16);
+  tft.drawString("Device", tft.width() / 2, tft.height() / 2 + 32);
+  Serial.println("...Connecting to OBDII...");
+
+  if (!ELM_PORT.connect("Android-Vlink")) // Device name of iCar Vgate pro BT4.0 OBD adapter
+  {
+    Serial.println("Couldn't connect to OBD scanner - Phase 1");
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextSize(2);
+    tft.drawString("Couldn't", tft.width() / 2, tft.height() / 2 - 16);
+    tft.drawString("connect to", tft.width() / 2, tft.height() / 2);
+    tft.drawString("OBDII", tft.width() / 2, tft.height() / 2 + 16);
+    tft.drawString("scanner", tft.width() / 2, tft.height() / 2 + 32);
+    tft.drawString(" Phase 1", tft.width() / 2, tft.height() / 2 + 48);   
+    
+    while (1);
+  }
+
+  if (!myELM327.begin(ELM_PORT,'6')) // select protocol '6'
+  {
+    Serial.println("Couldn't connect to OBD scanner - Phase 2");    
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextSize(2);
+    tft.drawString("Couldn't", tft.width() / 2, tft.height() / 2 - 16);
+    tft.drawString("connect to", tft.width() / 2, tft.height() / 2);
+    tft.drawString("OBDII", tft.width() / 2, tft.height() / 2 + 16);
+    tft.drawString("scanner", tft.width() / 2, tft.height() / 2 + 32);
+    tft.drawString(" Phase 2", tft.width() / 2, tft.height() / 2 + 48);
+    delay(1000);       
+    
+    //while (1);
+    ESP.restart();
+  }
+  
+  Serial.println("Connected to OBDII");
+      
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextSize(2);
+  tft.drawString("Connected",  tft.width() / 2, tft.height() / 2 - 16);
+  tft.drawString("to OBDII", tft.width() / 2, tft.height() / 2);
+
+  delay(500);
+  tft.fillScreen(TFT_BLACK);  
              
 
 /*/////////////////////////////////////////////////////////////////*/
