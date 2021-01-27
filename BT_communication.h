@@ -1,5 +1,5 @@
-#ifndef test123
-#define test123
+#ifndef BT_COMMUNICATION
+#define BT_COMMUNICATION
 
 #include "BluetoothSerial.h"
 #include "ELMduino.h"
