@@ -59,10 +59,10 @@ Button bouton2(BUTTON_2_PIN);
 
 int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
 
-const char* ssid = "VIRGIN131";
-const char* password = "3D4F2F3311D5";
-const char* ssid2 = "SM-G950W2093";
-const char* password2 = "5311Fond";
+const char* ssid = "********";             //replace network name here
+const char* password = "***********";      //replace network password
+const char* ssid2 = "**********";         //replace hotspot wifi name here
+const char* password2 = "**********";         //replace hotspot wifi password here
 
 const int VESSoff = 12;
 boolean SelectOn = true;
@@ -95,6 +95,8 @@ float SOC;
 float SOH;  
 float Heater;
 float COOLtemp;
+float OUTDOORtemp;
+float INDOORtemp;
 char SpdSelect;
 float Odometer;
 float Speed;
@@ -148,12 +150,12 @@ const int pwmLedChannelTFT = 0;
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool interupt_read_data = false;
-int nbParam = 23;    //number of parameters to send to Google Sheet
+int nbParam = 25;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
 
-const char* resource = "/trigger/konaEv_readings/with/key/dqNCA93rEfn0CAeqkVRXvl";
+const char* resource = "/trigger/konaEv_readings/with/key/xxxxxxxxxxxxxxx"; //Replace IFTTT applet key here
 
 // Maker Webhooks IFTTT
 const char* server = "maker.ifttt.com";
@@ -385,8 +387,7 @@ void makeIFTTTRequest() {
 
   float sensor_Values[nbParam];
 
-  //char column_name[ ][25]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC"};;
-  char column_name[ ][25]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins"};;
+  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp"};;
   
   sensor_Values[0] = SOC;
   sensor_Values[1] = Power;
@@ -411,6 +412,8 @@ void makeIFTTTRequest() {
   sensor_Values[20] = CCC;
   sensor_Values[21] = SOH;  
   sensor_Values[22] = OPtimemins;
+  sensor_Values[23] = OUTDOORtemp;
+  sensor_Values[24] = INDOORtemp;
 
   String headerNames = "";
   String payload ="";
@@ -700,6 +703,18 @@ void read_data(){
         break;
 
      case 7:  
+        myELM327.sendCommand("AT SH 7B3");       //Set Header Aircon 
+        if (myELM327.queryPID("220100")) {      // Service and Message PID
+          char* payload = myELM327.payload;
+          size_t payloadLen = myELM327.recBytes;
+
+          processPayload(payload, payloadLen, results);          
+          INDOORtemp = (((convertToInt(results.frames[1], 3, 2)) * 0.5) - 40);
+          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 2)) * 0.5) - 40);
+          }        
+        break;
+
+     case 8:  
         myELM327.sendCommand("AT SH 7D4");       //Speed Header 
         if (myELM327.queryPID("220101")) {      // Service and Message PID
           char* payload = myELM327.payload;
