@@ -854,6 +854,11 @@ void ButtonLoop() {
                   Serial.println("winter: ");Serial.println(winter);                   
                 }
             }
+            else{
+              ledBacklight = 80;
+              ledcWrite(pwmLedChannelTFT, ledBacklight);
+             
+            }
         }
     }     
 }
