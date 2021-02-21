@@ -111,6 +111,7 @@ byte BMS_ign;
 float OPtimemins;
 float OPtimehours;
 float Power;
+float MeanPower = 0;
 float CurrInitOdo = 0;
 float CurrInitCEC = 0;
 float CurrInitCED = 0;
@@ -127,6 +128,8 @@ float DischAh = 0;
 float RegenAh = 0;
 int TripOdo;
 int InitOdo = 0;
+float InitOPtimehours;
+float TripOPtime;
 float InitSOC = 0;
 float InitCEC = 0;
 float InitCED = 0;
@@ -137,6 +140,7 @@ float Discharg = 0;
 float LastSOC = 0;
 float EstFull_kWh;
 float EstFull_Ah;
+bool DriveOn = false;
 bool winter = false;
 bool SetupOn = false;
 bool StartWifi = true;
@@ -229,7 +233,9 @@ void setup() {
   InitOdo = EEPROM.readFloat(20);
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
-  winter = EEPROM.readBool(32);
+  MeanPower = EEPROM.readFloat(32);
+  InitOPtimehours = EEPROM.readFloat(36);
+  winter = EEPROM.readBool(40);
 
 /*////////////////////////////////////////////////////////////////*/   
 /*              Open serial monitor communications                */
@@ -715,7 +721,7 @@ void read_data(){
         break;
 
      case 8:  
-        myELM327.sendCommand("AT SH 7D4");       //Speed Header 
+        myELM327.sendCommand("AT SH 7D4");       //Set Speed Header 
         if (myELM327.queryPID("220101")) {      // Service and Message PID
           char* payload = myELM327.payload;
           size_t payloadLen = myELM327.recBytes;
@@ -736,6 +742,8 @@ void read_data(){
 
   CurrTripOdo = Odometer - CurrInitOdo;
 
+  TripOPtime = InitOPtimehours - InitOPtimehours;
+
   UsedSOC = InitSOC - SOC;
 
   CurrUsedSOC = CurrInitSOC - SOC;
@@ -744,7 +752,13 @@ void read_data(){
 
   EstFull_Ah = 100 * Net_Ah / UsedSOC;
 
-  CellVdiff = MAXcellv - MINcellv;  
+  CellVdiff = MAXcellv - MINcellv;
+
+  if(Speed > 5){
+    MeanPower = (0.95 * MeanPower) + (0.05 * Power);
+  }
+
+  
   
 }  
 
@@ -836,7 +850,7 @@ void ButtonLoop() {
               SetupOn = true;
             }
             else{
-              EEPROM.writeBool(32, winter);
+              EEPROM.writeBool(36, winter);
               EEPROM.commit();
               SetupOn = false;
             }
@@ -874,6 +888,7 @@ void reset_trip() {
     InitCEC = CEC;  //initiate to current CEC for initial CEC value and
     InitCDC = CDC;
     InitCCC = CCC;
+    InitOPtimehours = OPtimehours;
     Net_kWh = 0;
     UsedSOC = 0;
     Discharg = 0;
@@ -881,6 +896,7 @@ void reset_trip() {
     Net_Ah = 0;
     DischAh = 0;
     RegenAh = 0;
+    MeanPower = 0;
     EEPROM.writeFloat(0, Net_kWh);    //save initial CED to Flash memory
     EEPROM.writeFloat(4, InitCED);    //save initial CED to Flash memory
     EEPROM.writeFloat(8, InitCEC);    //save initial CEC to Flash memory  
@@ -889,6 +905,8 @@ void reset_trip() {
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
+    EEPROM.writeFloat(32, MeanPower);    //Reset MeanPower to 0 in Flash memory
+    EEPROM.writeFloat(36, InitOPtimehours);    //Reset MeanPower to 0 in Flash memory
     EEPROM.commit();
     //Serial.println("Values saved to EEPROM");
 }
@@ -924,6 +942,18 @@ void setVessOff(char selector){
         }
         if (selector == 'P'){
           SelectOn = true;
+        }
+      }
+
+/*//////Function to disable the VESS //////////*/
+
+void saveMeanPower(char selector){  
+        if (selector == 'D' && !DriveOn){ 
+          DriveOn = true;
+        }        
+        if (selector == 'P' && DriveOn){
+          DriveOn = false;
+          EEPROM.writeFloat(32, MeanPower);
         }
       }
 
