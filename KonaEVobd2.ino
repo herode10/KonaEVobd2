@@ -15,12 +15,16 @@
 // #include "SPI.h"
 #include "WiFi.h"
 #include "WiFiMulti.h"
+#include "FreeRTOS.h"
 
 BluetoothSerial SerialBT; //Object for Bluetooth
 
 ELM327 myELM327;    //Object for OBD2 device
 
 WiFiMulti wifiMulti;
+
+TaskHandle_t Task1;
+TaskHandle_t Task2;
 
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom display library
 
@@ -59,10 +63,10 @@ Button bouton2(BUTTON_2_PIN);
 
 int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
 
-const char* ssid = "********";             //replace network name here
-const char* password = "***********";      //replace network password
-const char* ssid2 = "**********";         //replace hotspot wifi name here
-const char* password2 = "**********";         //replace hotspot wifi password here
+const char* ssid = "VIRGIN131";             //replace network name here
+const char* password = "3D4F2F3311D5";      //replace network password
+const char* ssid2 = "SM-G950W2093";         //replace hotspot wifi name here
+const char* password2 = "5311Fond";         //replace hotspot wifi password here
 
 const int VESSoff = 12;
 boolean SelectOn = true;
@@ -140,6 +144,15 @@ float Discharg = 0;
 float LastSOC = 0;
 float EstFull_kWh;
 float EstFull_Ah;
+float left_kwh;
+float used_kwh;
+float lost_kwh;
+float EstLeft_kWh;
+unsigned long elap_time; 
+float MeanSpeed;
+float Time_100km;
+float Pwr_100km;
+float Est_range;
 bool DriveOn = false;
 bool winter = false;
 bool SetupOn = false;
@@ -154,12 +167,12 @@ const int pwmLedChannelTFT = 0;
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool interupt_read_data = false;
-int nbParam = 25;    //number of parameters to send to Google Sheet
+int nbParam = 32;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
 
-const char* resource = "/trigger/konaEv_readings/with/key/xxxxxxxxxxxxxxx"; //Replace IFTTT applet key here
+const char* resource = "/trigger/konaEv_readings/with/key/dqNCA93rEfn0CAeqkVRXvl"; //Replace IFTTT applet key here
 
 // Maker Webhooks IFTTT
 const char* server = "maker.ifttt.com";
@@ -223,6 +236,26 @@ void setup() {
 
   /* uncomment if you need to display Safestring results on Serial Monitor */
   //SafeString::setOutput(Serial); 
+
+  xTaskCreatePinnedToCore(
+    Task1code, /* Function to implement the task */
+    "Task1", /* Name of the task */
+    10000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &Task1,  /* Task handle. */
+    0); /* Core where the task should run */
+    delay(500);
+
+  xTaskCreatePinnedToCore(
+    Task2code, /* Function to implement the task */
+    "Task2", /* Name of the task */
+    10000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &Task2,  /* Task handle. */
+    0); /* Core where the task should run */
+    delay(500);
   
   /*////// Get the stored values from last re-initialisation /////*/
   Net_kWh = EEPROM.readFloat(0);
@@ -393,7 +426,7 @@ void makeIFTTTRequest() {
 
   float sensor_Values[nbParam];
 
-  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp"};;
+  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","MeanPower","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
   
   sensor_Values[0] = SOC;
   sensor_Values[1] = Power;
@@ -420,6 +453,13 @@ void makeIFTTTRequest() {
   sensor_Values[22] = OPtimemins;
   sensor_Values[23] = OUTDOORtemp;
   sensor_Values[24] = INDOORtemp;
+  sensor_Values[25] = used_kwh;
+  sensor_Values[26] = left_kwh;
+  sensor_Values[27] = MeanPower;
+  sensor_Values[28] = MeanSpeed;
+  sensor_Values[29] = Time_100km;
+  sensor_Values[30] = Pwr_100km;
+  sensor_Values[31] = Est_range;
 
   String headerNames = "";
   String payload ="";
@@ -441,8 +481,7 @@ void makeIFTTTRequest() {
     }
     Serial.print("headerNames: ");Serial.println(headerNames);
   
-      payload = headerNames;
-      //payload = String("{\"value1\":\"") + "SOC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSOC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSOC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
+      payload = headerNames;      
     }
     
   else{
@@ -748,24 +787,92 @@ void read_data(){
 
   CurrUsedSOC = CurrInitSOC - SOC;
 
-  EstFull_kWh = 100 * Net_kWh / UsedSOC;
-
   EstFull_Ah = 100 * Net_Ah / UsedSOC;
 
   CellVdiff = MAXcellv - MINcellv;
 
-  if(Speed > 5){
-    MeanPower = (0.95 * MeanPower) + (0.05 * Power);
+  if(used_kwh > 0){
+    lost_kwh = Net_kWh / used_kwh;
   }
+  else{
+    lost_kwh = 1;
+  }
+    EstFull_kWh = 64 * lost_kwh;
+    EstLeft_kWh = left_kwh * lost_kwh; 
 
-  
-  
+    energy();
 }  
 
-//------------------------------------------------------------------------------------------
-//             End of Data retreve from OBD2 and extract values of it                               
-//------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
+//                   Energy Calculation Function
+//--------------------------------------------------------------------------------------------
 
+/*//////64kWh battery energy equation //////////*/
+double f(double x){
+    (0.00165 * x) + 0.56;
+  }
+  
+float energy(){
+  if(Speed > 5){
+    MeanPower = (0.95 * MeanPower) + (0.05 * Power);    
+  }
+  elap_time = millis() / 1000;
+  MeanSpeed = (CurrTripOdo / elap_time) * 3600;
+  if (MeanSpeed > 0){
+    Time_100km = 100 / MeanSpeed;
+  }
+  else{
+    Time_100km = 100 / 99999;
+  }
+  Pwr_100km = MeanPower * Time_100km;
+  Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
+}
+
+//--------------------------------------------------------------------------------------------
+//                   Task to calculate kWh that will be run on Core 0
+//--------------------------------------------------------------------------------------------
+
+void Task1code( void * pvParameters ){
+  double integral;
+  double interval;
+  int N = 50;
+
+  for(;;){
+  interval = (InitSOC - SOC) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = SOC + interval * i;
+    Serial.print("x: ");Serial.println(x);
+    integral += ((0.00165 * x) + 0.56);
+    Serial.print("integral: ");Serial.println(integral);
+    Serial.print("i: ");Serial.println(i);
+  }
+  used_kwh = integral * interval;
+  Serial.print("used_kwh: ");Serial.println(used_kwh);
+  }
+}
+
+void Task2code( void * pvParameters ){
+  double integral;
+  double interval;
+  int N = 50;
+
+  for(;;){
+  interval = (SOC - 0) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = 0 + interval * i;
+    Serial.print("x: ");Serial.println(x);
+    integral += ((0.00165 * x) + 0.56);
+    Serial.print("integral2: ");Serial.println(integral);
+    Serial.print("i: ");Serial.println(i);
+  }
+  left_kwh = integral * interval;
+  Serial.print("left_kwh: ");Serial.println(left_kwh);
+  }
+}
 
 //--------------------------------------------------------------------------------------------
 //                   Net Energy Calculation Function
@@ -1183,8 +1290,8 @@ void page2(){
 /*///////////////// Display Page 3 //////////////////////*/
 void page3(){
           
-        DisplayFloatPID(1, "Discharg", Discharg, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "Regen", Regen, 1, 0, 0, 0, 0);        
+        DisplayFloatPID(1, "Calc_Used", used_kwh, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "Calc_Left", left_kwh, 1, 0, 0, 0, 0);        
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_kWh", EstFull_kWh, 1, 0, 0, 0, 0);                     
 }
