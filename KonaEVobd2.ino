@@ -754,8 +754,8 @@ void read_data(){
           size_t payloadLen = myELM327.recBytes;
 
           processPayload(payload, payloadLen, results);          
-          INDOORtemp = (((convertToInt(results.frames[1], 3, 2)) * 0.5) - 40);
-          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 2)) * 0.5) - 40);
+          INDOORtemp = (((convertToInt(results.frames[1], 3, 1)) * 0.5) - 40);
+          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 1)) * 0.5) - 40);
           }        
         break;
 
