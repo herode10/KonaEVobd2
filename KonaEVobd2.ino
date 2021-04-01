@@ -59,7 +59,7 @@ Button bouton2(BUTTON_2_PIN);
 #define BATTv_HIGH_Warning 410      // Main Battery High Voltage warning (Volts)
 #define AUXBATTv_LOW_Warning 11.8   // Main Battery Low Voltage warning (Volts)
 #define AUXBATTv_HIGH_Warning 14.5  // Main Battery High Voltage warning (Volts)
-#define pagenumbers 7               // number of pages to display
+#define pagenumbers 8               // number of pages to display
 
 int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
 
@@ -115,7 +115,7 @@ byte BMS_ign;
 float OPtimemins;
 float OPtimehours;
 float Power;
-float MeanPower = 0;
+float CurrEnergHr = 0;
 float CurrInitOdo = 0;
 float CurrInitCEC = 0;
 float CurrInitCED = 0;
@@ -132,8 +132,10 @@ float DischAh = 0;
 float RegenAh = 0;
 int TripOdo;
 int InitOdo = 0;
-float InitOPtimehours;
+float InitOPtimemins;
 float TripOPtime;
+float CurrTimeInit;
+float CurrOPtime;
 float InitSOC = 0;
 float InitCEC = 0;
 float InitCED = 0;
@@ -266,8 +268,8 @@ void setup() {
   InitOdo = EEPROM.readFloat(20);
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
-  MeanPower = EEPROM.readFloat(32);
-  InitOPtimehours = EEPROM.readFloat(36);
+  //CurrEnergHr = EEPROM.readFloat(32);
+  InitOPtimemins = EEPROM.readFloat(36);
   winter = EEPROM.readBool(40);
 
 /*////////////////////////////////////////////////////////////////*/   
@@ -426,7 +428,7 @@ void makeIFTTTRequest() {
 
   float sensor_Values[nbParam];
 
-  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","MeanPower","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
+  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
   
   sensor_Values[0] = SOC;
   sensor_Values[1] = Power;
@@ -455,7 +457,7 @@ void makeIFTTTRequest() {
   sensor_Values[24] = INDOORtemp;
   sensor_Values[25] = used_kwh;
   sensor_Values[26] = left_kwh;
-  sensor_Values[27] = MeanPower;
+  sensor_Values[27] = CurrEnergHr;
   sensor_Values[28] = MeanSpeed;
   sensor_Values[29] = Time_100km;
   sensor_Values[30] = Pwr_100km;
@@ -781,7 +783,9 @@ void read_data(){
 
   CurrTripOdo = Odometer - CurrInitOdo;
 
-  TripOPtime = InitOPtimehours - InitOPtimehours;
+  TripOPtime = OPtimemins - InitOPtimemins;
+  
+  CurrOPtime = OPtimemins - CurrTimeInit;
 
   UsedSOC = InitSOC - SOC;
 
@@ -813,18 +817,16 @@ double f(double x){
   }
   
 float energy(){
-  if(Speed > 5){
-    MeanPower = (0.95 * MeanPower) + (0.05 * Power);    
-  }
-  elap_time = millis() / 1000;
-  MeanSpeed = (CurrTripOdo / elap_time) * 3600;
+  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;  
+  
+  MeanSpeed = (CurrTripOdo / CurrOPtime) * 3600;
   if (MeanSpeed > 0){
     Time_100km = 100 / MeanSpeed;
   }
   else{
     Time_100km = 100 / 99999;
   }
-  Pwr_100km = MeanPower * Time_100km;
+  Pwr_100km = CurrEnergHr * Time_100km;
   Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
 }
 
@@ -995,7 +997,7 @@ void reset_trip() {
     InitCEC = CEC;  //initiate to current CEC for initial CEC value and
     InitCDC = CDC;
     InitCCC = CCC;
-    InitOPtimehours = OPtimehours;
+    InitOPtimemins = OPtimemins;
     Net_kWh = 0;
     UsedSOC = 0;
     Discharg = 0;
@@ -1003,7 +1005,6 @@ void reset_trip() {
     Net_Ah = 0;
     DischAh = 0;
     RegenAh = 0;
-    MeanPower = 0;
     EEPROM.writeFloat(0, Net_kWh);    //save initial CED to Flash memory
     EEPROM.writeFloat(4, InitCED);    //save initial CED to Flash memory
     EEPROM.writeFloat(8, InitCEC);    //save initial CEC to Flash memory  
@@ -1012,8 +1013,8 @@ void reset_trip() {
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
-    EEPROM.writeFloat(32, MeanPower);    //Reset MeanPower to 0 in Flash memory
-    EEPROM.writeFloat(36, InitOPtimehours);    //Reset MeanPower to 0 in Flash memory
+    //EEPROM.writeFloat(32, CurrEnergHr);    //Reset MeanPower to 0 in Flash memory
+    EEPROM.writeFloat(36, InitOPtimemins);    //Reset MeanPower to 0 in Flash memory
     EEPROM.commit();
     //Serial.println("Values saved to EEPROM");
 }
@@ -1029,6 +1030,7 @@ void ResetCurrTrip(){
         CurrInitSOC = SOC;
         CurrTripReg = 0;
         CurrTripDisc = 0;
+        CurrTimeInit = OPtimemins;
         Serial.println("Trip Reset");
         ResetOn = false;
   }
@@ -1060,7 +1062,7 @@ void saveMeanPower(char selector){
         }        
         if (selector == 'P' && DriveOn){
           DriveOn = false;
-          EEPROM.writeFloat(32, MeanPower);
+          //EEPROM.writeFloat(32, CurrEnergHr);
         }
       }
 
@@ -1273,16 +1275,16 @@ void page1(){
         DisplayFloatPID(1, "TripOdo", TripOdo, 0, 0, 0, 0, 0);
         DisplayFloatPID(2, "SOC", SOC, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "UsedSOC", UsedSOC, 1, 0, 0, 0, 0);         
+        DisplayFloatPID(4, "Left_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);         
 }
 /*///////////////// End of Display Page 1 //////////////////////*/
 
 /*///////////////// Display Page 2 //////////////////////*/
 void page2(){
           
-        DisplayFloatPID(1, "DischAh", DischAh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "RegenAh", RegenAh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "Net_Ah", Net_Ah, 1, 0, 0, 0, 0);
+        DisplayFloatPID(1, "CurrEnergHr", CurrEnergHr, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "Est_range", Est_range, 1, 0, 0, 0, 0);
+        DisplayFloatPID(3, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_Ah", EstFull_Ah, 1, 0, 0, 0, 0);
 }
 /*///////////////// End of Display Page 2 //////////////////////*/
@@ -1341,9 +1343,9 @@ void page7(){
 /*///////////////// Display Page 8 //////////////////////*/
 void page8(){
         
-        DisplayFloatPID(1, "InitCED", InitCED, 1, 0, 0, 0, 0);        
-        DisplayFloatPID(2, "InitCEC", InitCEC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "CED", CED, 1, 0, 0, 0, 0);
+        DisplayFloatPID(1, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);        
+        DisplayFloatPID(2, "timemins", OPtimemins, 1, 0, 0, 0, 0);
+        DisplayFloatPID(3, "TimeInit", CurrTimeInit, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "CEC", CEC, 1, 0, 0, 0, 0);
 }
 /*///////////////// End of Display Page 8 //////////////////////*/
