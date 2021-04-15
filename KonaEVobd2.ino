@@ -13,8 +13,12 @@
 #include "TFT_eSPI.h"
 #include "BT_communication.h"
 #include "Wifi_connection.h"
+#include "FreeRTOS.h"
 
 #define DEBUG_PORT Serial
+
+TaskHandle_t Task1;
+TaskHandle_t Task2;
 
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom display library
 
@@ -109,6 +113,7 @@ byte BMS_ign;
 float OPtimemins;
 float OPtimehours;
 float Power;
+float CurrEnergHr = 0;
 float CurrInitOdo = 0;
 float CurrInitCEC = 0;
 float CurrInitCED = 0;
@@ -125,6 +130,10 @@ float DischAh = 0;
 float RegenAh = 0;
 int TripOdo;
 int InitOdo = 0;
+float InitOPtimemins;
+float TripOPtime;
+float CurrTimeInit;
+float CurrOPtime;
 float InitSOC = 0;
 float InitCEC = 0;
 float InitCED = 0;
@@ -135,6 +144,18 @@ float Discharg = 0;
 float LastSOC = 0;
 float EstFull_kWh;
 float EstFull_Ah;
+float left_kwh;
+float used_kwh;
+float lost_ratio;
+float new_lost;
+float old_lost;
+float EstLeft_kWh;
+unsigned long elap_time; 
+float MeanSpeed;
+float Time_100km;
+float Pwr_100km;
+float Est_range;
+bool DriveOn = false;
 bool winter = false;
 bool SetupOn = false;
 bool StartWifi = true;
@@ -143,7 +164,7 @@ bool initscan = false;
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool send_data = false;
-int nbParam = 23;    //number of parameters to send to Google Sheet
+int nbParam = 32;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
@@ -211,7 +232,27 @@ void setup() {
   EEPROM.begin(128);
 
   /* uncomment if you need to display Safestring results on Serial Monitor */
-  //SafeString::setOutput(Serial); 
+  //SafeString::setOutput(Serial);
+
+  xTaskCreatePinnedToCore(
+    Task1code, /* Function to implement the task */
+    "Task1", /* Name of the task */
+    10000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &Task1,  /* Task handle. */
+    0); /* Core where the task should run */
+    delay(500);
+
+  xTaskCreatePinnedToCore(
+    Task2code, /* Function to implement the task */
+    "Task2", /* Name of the task */
+    10000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &Task2,  /* Task handle. */
+    0); /* Core where the task should run */
+    delay(500);
   
   /*////// Get the stored values from last re-initialisation /////*/
   Net_kWh = EEPROM.readFloat(0);
@@ -222,7 +263,9 @@ void setup() {
   InitOdo = EEPROM.readFloat(20);
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
-  winter = EEPROM.readBool(32);
+  old_lost = EEPROM.readFloat(32);
+  InitOPtimemins = EEPROM.readFloat(36);
+  winter = EEPROM.readBool(40);
 
 /*////////////////////////////////////////////////////////////////*/   
 /*              Open serial monitor communications                */
@@ -247,7 +290,6 @@ void setup() {
 /*/////////////////////////////////////////////////////////////////*/
 
   if (StartWifi){
-    //initWifi();
     ConnectWifi(tft);
     if (WiFi.status() == WL_CONNECTED) {
       send_enabled = true;
@@ -261,56 +303,6 @@ void setup() {
 /*////////////////////////////////////////////////////////////////////////*/
 /*                         END OF SETUP                                   */
 /*////////////////////////////////////////////////////////////////////////*/
-
-//----------------------------------------------------------------------------------------
-//              Wifi Initialisation Function                                            
-//----------------------------------------------------------------------------------------
-
-void initWifi() {
-  Serial.print("Connecting to: "); 
-  Serial.print(ssid);
-
-  wifiMulti.addAP(ssid, password);
-  wifiMulti.addAP(ssid2, password2);
-    
-  tft.fillScreen(TFT_BLACK);
-  tft.drawString("Connecting", tft.width() / 2, tft.height() / 2 - 16);
-  tft.drawString("To", tft.width() / 2, tft.height() / 2);
-  tft.drawString("Wifi", tft.width() / 2, tft.height() / 2 + 16);
-  
-  int attempts = 1; // 1 attempts  
-  while (wifiMulti.run() != WL_CONNECTED  && (attempts-- > 0)) {        
-        Serial.print("attempts: ");Serial.println(attempts);
-      }
-  Serial.println("");
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("WiFi connected in: "); 
-    Serial.print(millis());
-    Serial.print(", IP address: "); 
-    Serial.println(WiFi.localIP());
-  
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Wifi", tft.width() / 2, tft.height() / 2 - 16);
-    tft.drawString("Connected", tft.width() / 2, tft.height() / 2);
-    //tft.drawString("To", tft.width() / 2, tft.height() / 2 + 16);
-    //tft.drawString(ssid, tft.width() / 2, tft.height() / 2 + 32);
-    delay(1000);
-  
-    send_enabled = true;
-  }
-  else
-  {
-    Serial.print("Failed to connect"); 
-     
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Wifi", tft.width() / 2, tft.height() / 2 - 16);
-    tft.drawString("Failed", tft.width() / 2, tft.height() / 2);
-    tft.drawString("To", tft.width() / 2, tft.height() / 2 + 16);
-    tft.drawString("Connect", tft.width() / 2, tft.height() / 2 + 32);
-    delay(1000); 
-  }
-}
 
 //----------------------------------------------------------------------------------------
 //               Send data to Google Sheet via IFTTT web service Function                                            
@@ -335,8 +327,8 @@ void makeIFTTTRequest() {
   Serial.println(resource);
 
   float sensor_Values[nbParam];
-
-  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp"};;
+ 
+  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
   
   sensor_Values[0] = SOC;
   sensor_Values[1] = Power;
@@ -363,6 +355,13 @@ void makeIFTTTRequest() {
   sensor_Values[22] = OPtimemins;
   sensor_Values[23] = OUTDOORtemp;
   sensor_Values[24] = INDOORtemp;
+  sensor_Values[25] = used_kwh;
+  sensor_Values[26] = left_kwh;
+  sensor_Values[27] = CurrEnergHr;
+  sensor_Values[28] = MeanSpeed;
+  sensor_Values[29] = Time_100km;
+  sensor_Values[30] = Pwr_100km;
+  sensor_Values[31] = Est_range;
 
   String headerNames = "";
   String payload ="";
@@ -652,19 +651,19 @@ void read_data(){
         break;
 
      case 7:  
-        myELM327.sendCommand("AT SH 7B3");       //Set Header Aircon 
+       myELM327.sendCommand("AT SH 7B3");       //Set Header Aircon 
         if (myELM327.queryPID("220100")) {      // Service and Message PID
           char* payload = myELM327.payload;
           size_t payloadLen = myELM327.recBytes;
 
           processPayload(payload, payloadLen, results);          
-          INDOORtemp = (((convertToInt(results.frames[1], 3, 2)) * 0.5) - 40);
-          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 2)) * 0.5) - 40);
+          INDOORtemp = (((convertToInt(results.frames[1], 3, 1)) * 0.5) - 40);
+          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 1)) * 0.5) - 40);
           }        
         break;
 
      case 8:  
-        myELM327.sendCommand("AT SH 7D4");       //Speed Header 
+        myELM327.sendCommand("AT SH 7D4");       //Set Speed Header 
         if (myELM327.queryPID("220101")) {      // Service and Message PID
           char* payload = myELM327.payload;
           size_t payloadLen = myELM327.recBytes;
@@ -685,22 +684,100 @@ void read_data(){
 
   CurrTripOdo = Odometer - CurrInitOdo;
 
+  TripOPtime = OPtimemins - InitOPtimemins;
+  
+  CurrOPtime = OPtimemins - CurrTimeInit;
+
   UsedSOC = InitSOC - SOC;
 
   CurrUsedSOC = CurrInitSOC - SOC;
 
-  EstFull_kWh = 100 * Net_kWh / UsedSOC;
-
   EstFull_Ah = 100 * Net_Ah / UsedSOC;
 
-  CellVdiff = MAXcellv - MINcellv;  
+  CellVdiff = MAXcellv - MINcellv;
+
+  if(used_kwh > 0){
+    lost_ratio = (0,9 * old_lost) + (0,1 * (Net_kWh / used_kwh));
+  }
+  else{
+    lost_ratio = 1;
+  }
+  EstFull_kWh = 64 * lost_ratio;
+  EstLeft_kWh = left_kwh * lost_ratio;
+  new_lost =  lost_ratio;
+
+  energy();
+  save_lost(SpdSelect);
   
-}  
+}
 
-//------------------------------------------------------------------------------------------
-//             End of Data retreve from OBD2 and extract values of it                               
-//------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------
+//                   Energy Calculation Function
+//--------------------------------------------------------------------------------------------
 
+/*//////64kWh battery energy equation //////////*/
+double f(double x){
+    (0.00165 * x) + 0.56;
+  }
+  
+float energy(){
+  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;  
+  
+  MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
+  if (MeanSpeed > 0){
+    Time_100km = 100 / MeanSpeed;
+  }
+  else{
+    Time_100km = 100 / 99999;
+  }
+  Pwr_100km = CurrEnergHr * Time_100km;
+  if (Pwr_100km > 1){
+    Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
+  }
+  else{
+    Est_range = 0.1;
+  }
+}
+
+//--------------------------------------------------------------------------------------------
+//                   Task to calculate kWh that will be run on Core 0
+//--------------------------------------------------------------------------------------------
+
+void Task1code( void * pvParameters ){
+  double integral;
+  double interval;
+  int N = 50;
+
+  for(;;){
+  interval = (InitSOC - SOC) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = SOC + interval * i;    
+    integral += ((0.00165 * x) + 0.56);    
+  }
+  used_kwh = integral * interval;
+  Serial.print("used_kwh: ");Serial.println(used_kwh);
+  }
+}
+
+void Task2code( void * pvParameters ){
+  double integral;
+  double interval;
+  int N = 50;
+
+  for(;;){
+  interval = (SOC - 0) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = 0 + interval * i;    
+    integral += ((0.00165 * x) + 0.56);    
+  }
+  left_kwh = integral * interval;
+  Serial.print("left_kwh: ");Serial.println(left_kwh);
+  }
+}
 
 //--------------------------------------------------------------------------------------------
 //                   Net Energy Calculation Function
@@ -785,7 +862,7 @@ void ButtonLoop() {
               SetupOn = true;
             }
             else{
-              EEPROM.writeBool(32, winter);
+              EEPROM.writeBool(36, winter);
               EEPROM.commit();
               SetupOn = false;
             }
@@ -838,6 +915,8 @@ void reset_trip() {
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
+    EEPROM.writeFloat(32, 1);    //Reset MeanPower to 0 in Flash memory
+    EEPROM.writeFloat(36, InitOPtimemins);    //Reset MeanPower to 0 in Flash memory
     EEPROM.commit();
     //Serial.println("Values saved to EEPROM");
 }
@@ -853,6 +932,7 @@ void ResetCurrTrip(){
         CurrInitSOC = SOC;
         CurrTripReg = 0;
         CurrTripDisc = 0;
+        CurrTimeInit = OPtimemins;
         Serial.println("Trip Reset");
         ResetOn = false;
   }
@@ -873,6 +953,19 @@ void setVessOff(char selector){
         }
         if (selector == 'P'){
           SelectOn = true;
+        }
+      }
+
+/*//////Function to save current lost //////////*/
+
+void save_lost(char selector){  
+        if (selector == 'D' && !DriveOn){ 
+          DriveOn = true;
+        }        
+        if (selector == 'P' && DriveOn){
+          DriveOn = false;
+          EEPROM.writeFloat(32, new_lost);
+          Serial.println("new_lost saved to EEPROM");
         }
       }
 
@@ -1083,18 +1176,18 @@ void DisplayNumberPID(int pagePosition, float PID, const char* text, int warning
 void page1(){    
                       
         DisplayFloatPID(1, "TripOdo", TripOdo, 0, 0, 0, 0, 0);
-        DisplayFloatPID(2, "SOC", SOC, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "UsedSOC", UsedSOC, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "UsedSOC", UsedSOC, 1, 0, 0, 0, 0);         
+        DisplayFloatPID(4, "EstLeft_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);         
 }
 /*///////////////// End of Display Page 1 //////////////////////*/
 
 /*///////////////// Display Page 2 //////////////////////*/
 void page2(){
           
-        DisplayFloatPID(1, "DischAh", DischAh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "RegenAh", RegenAh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "Net_Ah", Net_Ah, 1, 0, 0, 0, 0);
+        DisplayFloatPID(1, "CurrEnergHr", CurrEnergHr, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "Est_range", Est_range, 1, 0, 0, 0, 0);
+        DisplayFloatPID(3, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_Ah", EstFull_Ah, 1, 0, 0, 0, 0);
 }
 /*///////////////// End of Display Page 2 //////////////////////*/
@@ -1102,8 +1195,8 @@ void page2(){
 /*///////////////// Display Page 3 //////////////////////*/
 void page3(){
           
-        DisplayFloatPID(1, "Discharg", Discharg, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "Regen", Regen, 1, 0, 0, 0, 0);        
+        DisplayFloatPID(1, "Calc_Used", used_kwh, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "Calc_Left", left_kwh, 1, 0, 0, 0, 0);        
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_kWh", EstFull_kWh, 1, 0, 0, 0, 0);                     
 }
