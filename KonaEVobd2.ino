@@ -234,25 +234,25 @@ void setup() {
   /* uncomment if you need to display Safestring results on Serial Monitor */
   //SafeString::setOutput(Serial);
 
-  xTaskCreatePinnedToCore(
-    Task1code, /* Function to implement the task */
-    "Task1", /* Name of the task */
-    10000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &Task1,  /* Task handle. */
-    0); /* Core where the task should run */
-    delay(500);
+  //xTaskCreatePinnedToCore(
+    //Task1code, /* Function to implement the task */
+    //"Task1", /* Name of the task */
+    //10000,  /* Stack size in words */
+    //NULL,  /* Task input parameter */
+    //0,  /* Priority of the task */
+    //&Task1,  /* Task handle. */
+    //0); /* Core where the task should run */
+    //delay(500);
 
-  xTaskCreatePinnedToCore(
-    Task2code, /* Function to implement the task */
-    "Task2", /* Name of the task */
-    10000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &Task2,  /* Task handle. */
-    0); /* Core where the task should run */
-    delay(500);
+  //xTaskCreatePinnedToCore(
+    //Task2code, /* Function to implement the task */
+    //"Task2", /* Name of the task */
+    //10000,  /* Stack size in words */
+    //NULL,  /* Task input parameter */
+    //0,  /* Priority of the task */
+    //&Task2,  /* Task handle. */
+    //0); /* Core where the task should run */
+    //delay(500);
   
   /*////// Get the stored values from last re-initialisation /////*/
   Net_kWh = EEPROM.readFloat(0);
@@ -292,7 +292,7 @@ void setup() {
   if (StartWifi){
     ConnectWifi(tft);
     if (WiFi.status() == WL_CONNECTED) {
-      send_enabled = true;
+      send_enabled = true;      
     }
   }
 
@@ -329,6 +329,7 @@ void makeIFTTTRequest() {
   float sensor_Values[nbParam];
  
   char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
+  //char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp"};;
   
   sensor_Values[0] = SOC;
   sensor_Values[1] = Power;
@@ -692,12 +693,16 @@ void read_data(){
 
   CurrUsedSOC = CurrInitSOC - SOC;
 
-  EstFull_Ah = 100 * Net_Ah / UsedSOC;
+  //EstFull_Ah = 100 * Net_Ah / UsedSOC;
 
   CellVdiff = MAXcellv - MINcellv;
-
+  EstFull_kWh = 100 * Net_kWh / UsedSOC;
+  calc_used_kwh();
+  calc_left_kwh();
+  
   if(used_kwh > 0){
     lost_ratio = (0,9 * old_lost) + (0,1 * (Net_kWh / used_kwh));
+    lost_ratio = Net_kWh / used_kwh;
   }
   else{
     lost_ratio = 1;
@@ -706,8 +711,9 @@ void read_data(){
   EstLeft_kWh = left_kwh * lost_ratio;
   new_lost =  lost_ratio;
 
+  
   energy();
-  save_lost(SpdSelect);
+  //save_lost(SpdSelect);
   
 }
 
@@ -737,6 +743,36 @@ float energy(){
   else{
     Est_range = 0.1;
   }
+}
+
+void calc_used_kwh(){
+  double integral;
+  double interval;
+  int N = 50;
+  interval = (InitSOC - SOC) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = SOC + interval * i;    
+    integral += ((0.00165 * x) + 0.56);    
+  }
+  used_kwh = integral * interval;
+  Serial.print("used_kwh= ");Serial.println(used_kwh);
+}
+
+void calc_left_kwh(){
+  double integral;
+  double interval;
+  int N = 50;
+  interval = (SOC - 0) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = SOC + interval * i;    
+    integral += ((0.00165 * x) + 0.56);    
+  }
+  left_kwh = integral * interval;
+  Serial.print("left_kwh= ");Serial.println(left_kwh);
 }
 
 //--------------------------------------------------------------------------------------------
@@ -1273,7 +1309,7 @@ void loop() {
 
   currentTimer = millis();  
   if ((currentTimer - previousTimer >= sendInterval) && send_enabled) {    
-    //send_data = true;
+    send_data = true;
     previousTimer = currentTimer;
   }
                
@@ -1312,7 +1348,7 @@ void loop() {
   /*/////// Send Data to Google Sheet /////////*/ 
   
   if (send_enabled && send_data) {
-        if (WiFi.status() != WL_CONNECTED) {            
+        if (WiFi.status() != WL_CONNECTED) { 
             //send_data = false;
             send_enabled = false;       
         }        
