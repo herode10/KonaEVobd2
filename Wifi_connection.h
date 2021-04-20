@@ -13,9 +13,8 @@ const char* ssid2 = "SM-G950W2093";
 const char* password2 = "5311Fond";
 
 void ConnectWifi(TFT_eSPI& tft){
-  Serial.print("Connecting to: "); 
-  Serial.print(ssid);
-
+  Serial.print("Connecting to Wifi "); 
+  
   wifiMulti.addAP(ssid, password);
   wifiMulti.addAP(ssid2, password2);
     
@@ -41,8 +40,7 @@ void ConnectWifi(TFT_eSPI& tft){
     tft.drawString("Connected", tft.width() / 2, tft.height() / 2);
     //tft.drawString("To", tft.width() / 2, tft.height() / 2 + 16);
     //tft.drawString(ssid, tft.width() / 2, tft.height() / 2 + 32);
-    delay(1000);
-  
+    delay(1000);  
   }
   else
   {
