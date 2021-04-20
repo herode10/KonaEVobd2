@@ -768,7 +768,7 @@ void calc_left_kwh(){
   integral = 0;
   float x = 0;
   for (int i = 0; i < N; ++i){
-    x = SOC + interval * i;    
+    x = 0 + interval * i;    
     integral += ((0.00165 * x) + 0.56);    
   }
   left_kwh = integral * interval;
