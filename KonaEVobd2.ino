@@ -125,6 +125,7 @@ float CurrNet_kWh;
 float CurrUsedSOC;
 float CurrTripDisc;
 float CurrTripReg;
+float CurrEnergHr;
 float Net_kWh = 0;
 float UsedSOC = 0;
 float Net_Ah = 0;
@@ -402,6 +403,8 @@ void initWifi() {
   }
 }
 
+
+
 //----------------------------------------------------------------------------------------
 //               Send data to Google Sheet via IFTTT web service Function                                            
 //----------------------------------------------------------------------------------------
@@ -500,6 +503,7 @@ void makeIFTTTRequest() {
       i++;    
     }
   }
+  
   Serial.print("payload: ");Serial.println(payload);
 
   String jsonObject = payload + "\"}";
@@ -754,8 +758,8 @@ void read_data(){
           size_t payloadLen = myELM327.recBytes;
 
           processPayload(payload, payloadLen, results);          
-          INDOORtemp = (((convertToInt(results.frames[1], 3, 2)) * 0.5) - 40);
-          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 2)) * 0.5) - 40);
+          INDOORtemp = (((convertToInt(results.frames[1], 3, 1)) * 0.5) - 40);
+          OUTDOORtemp = (((convertToInt(results.frames[1], 4, 1)) * 0.5) - 40);
           }        
         break;
 
@@ -804,6 +808,93 @@ void read_data(){
 }  
 
 //--------------------------------------------------------------------------------------------
+//                   Payload Function
+//--------------------------------------------------------------------------------------------
+
+char GeneratePayload(){  
+  float SentValues[nbParam];
+
+  char value_names[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
+  
+  SentValues[0] = SOC;
+  SentValues[1] = Power;
+  SentValues[2] = BattMinT;
+  SentValues[3] = Heater;
+  SentValues[4] = Net_Ah;
+  SentValues[5] = Net_kWh;
+  SentValues[6] = AuxBattSOC;
+  SentValues[7] = AuxBattV;
+  SentValues[8] = Max_Pwr;
+  SentValues[9] = Max_Reg;  
+  SentValues[10] = BmsSOC;
+  SentValues[11] = MAXcellv;
+  SentValues[12] = MINcellv;
+  SentValues[13] = BATTv;
+  SentValues[14] = BATTc;
+  SentValues[15] = Speed;
+  SentValues[16] = Odometer;
+  SentValues[17] = CEC;
+  SentValues[18] = CED;
+  SentValues[19] = CDC;
+  SentValues[20] = CCC;
+  SentValues[21] = SOH;  
+  SentValues[22] = OPtimemins;
+  SentValues[23] = OUTDOORtemp;
+  SentValues[24] = INDOORtemp;
+  SentValues[25] = used_kwh;
+  SentValues[26] = left_kwh;
+  SentValues[27] = CurrEnergHr;
+  SentValues[28] = MeanSpeed;
+  SentValues[29] = Time_100km;
+  SentValues[30] = Pwr_100km;
+  SentValues[31] = Est_range;
+
+  String headerNames = "";
+  String payload2 ="";
+
+  int i=0;
+  //Serial.print("initscan: ");Serial.println(initscan);
+  if(initscan){
+      initscan = false;
+      while(i!=nbParam) 
+    {
+      if(i==0){
+        headerNames = String("{\"value1\":\"") + value_names[i];
+        i++;
+      }
+      if(i==nbParam)
+        break;
+      headerNames = headerNames + "|||" + value_names[i];
+      i++;    
+    }
+    Serial.print("headerNames: ");Serial.println(headerNames);
+  
+      payload2 = headerNames;      
+    }
+    
+  else{
+    while(i!=nbParam) 
+    {
+      if(i==0)
+      {
+        payload2 = String("{\"value1\":\"") + SentValues[i];
+        i++;
+      }
+      if(i==nbParam)
+      {
+         break;
+      }
+      payload2 = payload2 + "|||" + SentValues[i];
+      i++;    
+    }
+  }
+  int str_len = payload2.length() + 1;
+  char char_array[str_len];
+  payload2.toCharArray(char_array, str_len);
+  
+ 
+}
+//--------------------------------------------------------------------------------------------
 //                   Energy Calculation Function
 //--------------------------------------------------------------------------------------------
 
@@ -813,11 +904,17 @@ double f(double x){
   }
   
 float energy(){
+
   if(Speed > 5){
     MeanPower = (0.95 * MeanPower) + (0.05 * Power);    
   }
   elap_time = millis() / 1000;
-  MeanSpeed = (CurrTripOdo / elap_time) * 3600;
+  MeanSpeed = (CurrTripOdo / elap_time) * 60;
+
+  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;  
+  
+  MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
+
   if (MeanSpeed > 0){
     Time_100km = 100 / MeanSpeed;
   }
@@ -826,6 +923,13 @@ float energy(){
   }
   Pwr_100km = MeanPower * Time_100km;
   Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
+  Pwr_100km = CurrEnergHr * Time_100km;
+  if (Pwr_100km > 1){
+    Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
+  }
+  else{
+    Est_range = 0.1;
+  }
 }
 
 //--------------------------------------------------------------------------------------------
