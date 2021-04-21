@@ -147,10 +147,9 @@ float EstFull_Ah;
 float left_kwh;
 float used_kwh;
 float lost_ratio;
-float new_lost;
-float old_lost;
+float old_Pwr_100km = 14;
+float old_lost = 1;
 float EstLeft_kWh;
-unsigned long elap_time; 
 float MeanSpeed;
 float Time_100km;
 float Pwr_100km;
@@ -255,6 +254,7 @@ void setup() {
     //delay(500);
   
   /*////// Get the stored values from last re-initialisation /////*/
+  
   Net_kWh = EEPROM.readFloat(0);
   InitCED = EEPROM.readFloat(4);    
   InitCEC = EEPROM.readFloat(8);
@@ -264,9 +264,11 @@ void setup() {
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
   old_lost = EEPROM.readFloat(32);
-  InitOPtimemins = EEPROM.readFloat(36);
+  old_Pwr_100km = EEPROM.readFloat(36);
   winter = EEPROM.readBool(40);
-
+  
+  
+  
 /*////////////////////////////////////////////////////////////////*/   
 /*              Open serial monitor communications                */
 /*////////////////////////////////////////////////////////////////*/
@@ -277,6 +279,9 @@ void setup() {
   }
     
   Serial.println("Serial Monitor - STARTED");
+
+  Serial.print("old_lost= ");Serial.println(old_lost);
+  Serial.print("old_Pwr_100km= ");Serial.println(old_Pwr_100km);
     
 /*/////////////////////////////////////////////////////////////////*/
 /*                    CONNECTION TO OBDII                          */
@@ -693,27 +698,27 @@ void read_data(){
 
   CurrUsedSOC = CurrInitSOC - SOC;
 
-  //EstFull_Ah = 100 * Net_Ah / UsedSOC;
+  EstFull_Ah = 100 * Net_Ah / UsedSOC;
 
   CellVdiff = MAXcellv - MINcellv;
+  
   EstFull_kWh = 100 * Net_kWh / UsedSOC;
+  
   calc_used_kwh();
   calc_left_kwh();
   
-  if(used_kwh > 0){
-    lost_ratio = (0,9 * old_lost) + (0,1 * (Net_kWh / used_kwh));
+  if(used_kwh > 5){
     lost_ratio = Net_kWh / used_kwh;
+    Serial.print("lost_ratio= ");Serial.println(lost_ratio);
   }
   else{
-    lost_ratio = 1;
+    lost_ratio = old_lost;
   }
   EstFull_kWh = 64 * lost_ratio;
   EstLeft_kWh = left_kwh * lost_ratio;
-  new_lost =  lost_ratio;
-
-  
+    
   energy();
-  //save_lost(SpdSelect);
+  save_lost(SpdSelect);
   
 }
 
@@ -736,7 +741,13 @@ float energy(){
   else{
     Time_100km = 100 / 99999;
   }
-  Pwr_100km = CurrEnergHr * Time_100km;
+  if (CurrNet_kWh > 5){
+    Pwr_100km = CurrEnergHr * Time_100km;
+  }
+  else{
+    Pwr_100km = old_Pwr_100km;
+    Serial.print("Pwr_100km= ");Serial.println(Pwr_100km);
+  }
   if (Pwr_100km > 1){
     Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
   }
@@ -757,7 +768,6 @@ void calc_used_kwh(){
     integral += ((0.00165 * x) + 0.56);    
   }
   used_kwh = integral * interval;
-  Serial.print("used_kwh= ");Serial.println(used_kwh);
 }
 
 void calc_left_kwh(){
@@ -771,8 +781,7 @@ void calc_left_kwh(){
     x = 0 + interval * i;    
     integral += ((0.00165 * x) + 0.56);    
   }
-  left_kwh = integral * interval;
-  Serial.print("left_kwh= ");Serial.println(left_kwh);
+  left_kwh = integral * interval;  
 }
 
 //--------------------------------------------------------------------------------------------
@@ -898,7 +907,7 @@ void ButtonLoop() {
               SetupOn = true;
             }
             else{
-              EEPROM.writeBool(36, winter);
+              EEPROM.writeBool(40, winter);
               EEPROM.commit();
               SetupOn = false;
             }
@@ -950,8 +959,8 @@ void reset_trip() {
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
-    EEPROM.writeFloat(32, 1);    //Reset MeanPower to 0 in Flash memory
-    EEPROM.writeFloat(36, InitOPtimemins);    //Reset MeanPower to 0 in Flash memory
+    EEPROM.writeFloat(32, lost_ratio);    //save actual batt energy lost in Flash memory
+    EEPROM.writeFloat(36, Pwr_100km);    //save actual kWh/100 in Flash memory
     EEPROM.commit();
     //Serial.println("Values saved to EEPROM");
 }
@@ -999,8 +1008,9 @@ void save_lost(char selector){
         }        
         if (selector == 'P' && DriveOn){
           DriveOn = false;
-          EEPROM.writeFloat(32, new_lost);
+          EEPROM.writeFloat(32, lost_ratio);
           Serial.println("new_lost saved to EEPROM");
+          EEPROM.writeFloat(36, Pwr_100km);    //save actual kWh/100 in Flash memory
         }
       }
 
