@@ -142,17 +142,20 @@ float InitCDC = 0;
 float Regen = 0;
 float Discharg = 0;
 float LastSOC = 0;
+float integral; // variable to calculate energy between to soc values
+float interval; // variable to calculate energy between to soc values
+float return_kwh; // variable to calculate energy between to soc values
 float EstFull_kWh;
 float EstFull_Ah;
 float left_kwh;
 float used_kwh;
-float lost_ratio;
-float old_Pwr_100km = 14;
+float degrad_ratio;
+float old_kWh_100km = 14;
 float old_lost = 1;
 float EstLeft_kWh;
 float MeanSpeed;
 float Time_100km;
-float Pwr_100km;
+float kWh_100km;
 float Est_range;
 bool DriveOn = false;
 bool winter = false;
@@ -163,7 +166,7 @@ bool initscan = false;
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool send_data = false;
-int nbParam = 32;    //number of parameters to send to Google Sheet
+int nbParam = 34;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
@@ -174,7 +177,7 @@ const char* resource = "/trigger/konaEv_readings/with/key/dqNCA93rEfn0CAeqkVRXvl
 const char* server = "maker.ifttt.com";
 
 /*////// Variables for OBD data timing ////////////*/
-const long interval = 100; // interval to update OBD data (milliseconds)
+const long obd_update = 100; // interval to update OBD data (milliseconds)
 unsigned long currentMillis;  // timing variable to sample OBD data
 unsigned long previousMillis = 0; // timing variable to sample OBD data
 int pid_counter;
@@ -233,15 +236,7 @@ void setup() {
   /* uncomment if you need to display Safestring results on Serial Monitor */
   //SafeString::setOutput(Serial);
 
-  //xTaskCreatePinnedToCore(
-    //Task1code, /* Function to implement the task */
-    //"Task1", /* Name of the task */
-    //10000,  /* Stack size in words */
-    //NULL,  /* Task input parameter */
-    //0,  /* Priority of the task */
-    //&Task1,  /* Task handle. */
-    //0); /* Core where the task should run */
-    //delay(500);
+  
 
   //xTaskCreatePinnedToCore(
     //Task2code, /* Function to implement the task */
@@ -264,7 +259,7 @@ void setup() {
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
   old_lost = EEPROM.readFloat(32);
-  old_Pwr_100km = EEPROM.readFloat(36);
+  old_kWh_100km = EEPROM.readFloat(36);
   winter = EEPROM.readBool(40);
   
   
@@ -281,7 +276,7 @@ void setup() {
   Serial.println("Serial Monitor - STARTED");
 
   Serial.print("old_lost= ");Serial.println(old_lost);
-  Serial.print("old_Pwr_100km= ");Serial.println(old_Pwr_100km);
+  Serial.print("old_kWh_100km= ");Serial.println(old_kWh_100km);
     
 /*/////////////////////////////////////////////////////////////////*/
 /*                    CONNECTION TO OBDII                          */
@@ -301,7 +296,17 @@ void setup() {
     }
   }
 
-  initscan = true; // To write header name on Google Sheet on power up 
+  initscan = true; // To write header name on Google Sheet on power up
+
+  xTaskCreatePinnedToCore(
+    makeIFTTTRequest, /* Function to implement the task */
+    "Task1", /* Name of the task */
+    10000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    1,  /* Priority of the task */
+    &Task1,  /* Task handle. */
+    0); /* Core where the task should run */
+    delay(500);
   
 }   
 
@@ -309,135 +314,6 @@ void setup() {
 /*                         END OF SETUP                                   */
 /*////////////////////////////////////////////////////////////////////////*/
 
-//----------------------------------------------------------------------------------------
-//               Send data to Google Sheet via IFTTT web service Function                                            
-//----------------------------------------------------------------------------------------
-
-void makeIFTTTRequest() {
-  
-  Serial.print("Connecting to "); 
-  Serial.print(server);
-  
-  WiFiClient client;
-  int retries = 5;
-  while(!!!client.connect(server, 80) && (retries-- > 0)) {
-    Serial.print(".");
-  }
-  Serial.println();
-  if(!!!client.connected()) {
-    Serial.println("Failed to connect...");
-  }
-  
-  Serial.print("Request resource: "); 
-  Serial.println(resource);
-
-  float sensor_Values[nbParam];
- 
-  char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","Pwd_100km","Est_range"};;
-  //char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp"};;
-  
-  sensor_Values[0] = SOC;
-  sensor_Values[1] = Power;
-  sensor_Values[2] = BattMinT;
-  sensor_Values[3] = Heater;
-  sensor_Values[4] = Net_Ah;
-  sensor_Values[5] = Net_kWh;
-  sensor_Values[6] = AuxBattSOC;
-  sensor_Values[7] = AuxBattV;
-  sensor_Values[8] = Max_Pwr;
-  sensor_Values[9] = Max_Reg;  
-  sensor_Values[10] = BmsSOC;
-  sensor_Values[11] = MAXcellv;
-  sensor_Values[12] = MINcellv;
-  sensor_Values[13] = BATTv;
-  sensor_Values[14] = BATTc;
-  sensor_Values[15] = Speed;
-  sensor_Values[16] = Odometer;
-  sensor_Values[17] = CEC;
-  sensor_Values[18] = CED;
-  sensor_Values[19] = CDC;
-  sensor_Values[20] = CCC;
-  sensor_Values[21] = SOH;  
-  sensor_Values[22] = OPtimemins;
-  sensor_Values[23] = OUTDOORtemp;
-  sensor_Values[24] = INDOORtemp;
-  sensor_Values[25] = used_kwh;
-  sensor_Values[26] = left_kwh;
-  sensor_Values[27] = CurrEnergHr;
-  sensor_Values[28] = MeanSpeed;
-  sensor_Values[29] = Time_100km;
-  sensor_Values[30] = Pwr_100km;
-  sensor_Values[31] = Est_range;
-
-  String headerNames = "";
-  String payload ="";
-
-  int i=0;
-  //Serial.print("initscan: ");Serial.println(initscan);
-  if(initscan){
-      initscan = false;
-      while(i!=nbParam) 
-    {
-      if(i==0){
-        headerNames = String("{\"value1\":\"") + column_name[i];
-        i++;
-      }
-      if(i==nbParam)
-        break;
-      headerNames = headerNames + "|||" + column_name[i];
-      i++;    
-    }
-    Serial.print("headerNames: ");Serial.println(headerNames);
-  
-      payload = headerNames;
-      //payload = String("{\"value1\":\"") + "SOC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSOC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSOC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
-    }
-    
-  else{
-    while(i!=nbParam) 
-    {
-      if(i==0)
-      {
-        payload = String("{\"value1\":\"") + sensor_Values[i];
-        i++;
-      }
-      if(i==nbParam)
-      {
-         break;
-      }
-      payload = payload + "|||" + sensor_Values[i];
-      i++;    
-    }
-  }
-  Serial.print("payload: ");Serial.println(payload);
-
-  String jsonObject = payload + "\"}";
-                      
-                   
-  client.println(String("POST ") + resource + " HTTP/1.1");
-  client.println(String("Host: ") + server); 
-  client.println("Connection: close\r\nContent-Type: application/json");
-  client.print("Content-Length: ");
-  client.println(jsonObject.length());
-  client.println();
-  client.println(jsonObject);
-        
-  int timeout = 5; // 50 * 100mS = 5 seconds            
-  while(!!!client.available() && (timeout-- > 0)){
-    delay(100);
-  }
-  if(!!!client.available()) {
-    Serial.println("No response...");
-  }
-  while(client.available()){
-    Serial.write(client.read());
-  }
-  send_data = false;
-  
-  Serial.println();
-  Serial.println("closing connection");
-  client.stop(); 
-}
 //----------------------------------------------------------------------------------------
 //              OBDII Payloads Processing Functions                                           
 //----------------------------------------------------------------------------------------
@@ -686,142 +562,42 @@ void read_data(){
     
   Power = (BATTv * BATTc) * 0.001;
 
-  TripOdo = Odometer - InitOdo;
-
-  CurrTripOdo = Odometer - CurrInitOdo;
-
-  TripOPtime = OPtimemins - InitOPtimemins;
-  
-  CurrOPtime = OPtimemins - CurrTimeInit;
-
-  UsedSOC = InitSOC - SOC;
-
-  CurrUsedSOC = CurrInitSOC - SOC;
-
-  EstFull_Ah = 100 * Net_Ah / UsedSOC;
-
-  CellVdiff = MAXcellv - MINcellv;
-  
-  EstFull_kWh = 100 * Net_kWh / UsedSOC;
-  
-  calc_used_kwh();
-  calc_left_kwh();
-  
-  if(used_kwh > 5){
-    lost_ratio = Net_kWh / used_kwh;
-    Serial.print("lost_ratio= ");Serial.println(lost_ratio);
-  }
-  else{
-    lost_ratio = old_lost;
-  }
-  EstFull_kWh = 64 * lost_ratio;
-  EstLeft_kWh = left_kwh * lost_ratio;
+  if(!ResetOn){
+    TripOdo = Odometer - InitOdo;
     
-  energy();
-  save_lost(SpdSelect);
+    CurrTripOdo = Odometer - CurrInitOdo;
   
-}
-
-//--------------------------------------------------------------------------------------------
-//                   Energy Calculation Function
-//--------------------------------------------------------------------------------------------
-
-/*//////64kWh battery energy equation //////////*/
-double f(double x){
-    (0.00165 * x) + 0.56;
+    TripOPtime = OPtimemins - InitOPtimemins;
+    
+    CurrOPtime = OPtimemins - CurrTimeInit;
+  
+    UsedSOC = InitSOC - SOC;
+  
+    CurrUsedSOC = CurrInitSOC - SOC;
+  
+    EstFull_Ah = 100 * Net_Ah / UsedSOC;
+  
+    CellVdiff = MAXcellv - MINcellv;
+    
+    EstFull_kWh = 100 * Net_kWh / UsedSOC;
+    
+    used_kwh = calc_kwh(SOC, InitSOC);
+    left_kwh = calc_kwh(0, SOC);
+      
+    if(used_kwh > 5){
+      degrad_ratio = Net_kWh / used_kwh;
+      Serial.print("degrad_ratio= ");Serial.println(degrad_ratio);
+    }
+    else{
+      degrad_ratio = old_lost;
+    }
+    EstFull_kWh = 64 * degrad_ratio;
+    EstLeft_kWh = left_kwh * degrad_ratio;
+      
+    RangeCalc();
+    save_lost(SpdSelect);
   }
   
-float energy(){
-  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;  
-  
-  MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
-  if (MeanSpeed > 0){
-    Time_100km = 100 / MeanSpeed;
-  }
-  else{
-    Time_100km = 100 / 99999;
-  }
-  if (CurrNet_kWh > 5){
-    Pwr_100km = CurrEnergHr * Time_100km;
-  }
-  else{
-    Pwr_100km = old_Pwr_100km;
-    Serial.print("Pwr_100km= ");Serial.println(Pwr_100km);
-  }
-  if (Pwr_100km > 1){
-    Est_range =  (EstLeft_kWh / Pwr_100km) * 100;
-  }
-  else{
-    Est_range = 0.1;
-  }
-}
-
-void calc_used_kwh(){
-  double integral;
-  double interval;
-  int N = 50;
-  interval = (InitSOC - SOC) / N;
-  integral = 0;
-  float x = 0;
-  for (int i = 0; i < N; ++i){
-    x = SOC + interval * i;    
-    integral += ((0.00165 * x) + 0.56);    
-  }
-  used_kwh = integral * interval;
-}
-
-void calc_left_kwh(){
-  double integral;
-  double interval;
-  int N = 50;
-  interval = (SOC - 0) / N;
-  integral = 0;
-  float x = 0;
-  for (int i = 0; i < N; ++i){
-    x = 0 + interval * i;    
-    integral += ((0.00165 * x) + 0.56);    
-  }
-  left_kwh = integral * interval;  
-}
-
-//--------------------------------------------------------------------------------------------
-//                   Task to calculate kWh that will be run on Core 0
-//--------------------------------------------------------------------------------------------
-
-void Task1code( void * pvParameters ){
-  double integral;
-  double interval;
-  int N = 50;
-
-  for(;;){
-  interval = (InitSOC - SOC) / N;
-  integral = 0;
-  float x = 0;
-  for (int i = 0; i < N; ++i){
-    x = SOC + interval * i;    
-    integral += ((0.00165 * x) + 0.56);    
-  }
-  used_kwh = integral * interval;
-  Serial.print("used_kwh: ");Serial.println(used_kwh);
-  }
-}
-
-void Task2code( void * pvParameters ){
-  double integral;
-  double interval;
-  int N = 50;
-
-  for(;;){
-  interval = (SOC - 0) / N;
-  integral = 0;
-  float x = 0;
-  for (int i = 0; i < N; ++i){
-    x = 0 + interval * i;    
-    integral += ((0.00165 * x) + 0.56);    
-  }
-  left_kwh = integral * interval;
-  Serial.print("left_kwh: ");Serial.println(left_kwh);
-  }
 }
 
 //--------------------------------------------------------------------------------------------
@@ -860,10 +636,189 @@ float UpdateNetEnergy(){
         CurrNet_kWh = CurrTripDisc - CurrTripReg;        
 }
 
+
 //--------------------------------------------------------------------------------------------
-//                   End of Net Energy Calculation
+//                   Kilometer Range Calculation Function
 //--------------------------------------------------------------------------------------------
 
+float RangeCalc(){
+  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;  
+  
+  MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
+  if (MeanSpeed > 0){
+    Time_100km = 100 / MeanSpeed;
+  }
+  else{
+    Time_100km = 100 / 99999;
+  }
+  if (CurrOPtime > 2 && !ResetOn){
+  //if (CurrNet_kWh > 5 && !ResetOn){
+    kWh_100km = CurrEnergHr * Time_100km;
+    Serial.print("New_kWh_100km= ");Serial.println(kWh_100km);
+  }
+  else{
+    kWh_100km = old_kWh_100km;
+    Serial.print("kWh_100km= ");Serial.println(kWh_100km);
+  }
+  if (kWh_100km > 1){
+    Est_range =  (EstLeft_kWh / kWh_100km) * 100;
+  }
+  else{
+    Est_range = 999;
+  }
+}
+
+//--------------------------------------------------------------------------------------------
+//                   Function to calculate energy between two SOC values
+//--------------------------------------------------------------------------------------------
+
+float calc_kwh(float min_soc, float max_soc){
+  
+  static int N = 50;
+  interval = (max_soc - min_soc) / N;
+  integral = 0;
+  float x = 0;
+  for (int i = 0; i < N; ++i){
+    x = min_soc + interval * i;    
+    integral += ((0.00187 * x) + 0.548);  //64kWh battery energy equation
+  }
+  return_kwh = integral * interval;
+  return return_kwh;
+}
+
+//----------------------------------------------------------------------------------------
+//        Task on core 0 to Send data to Google Sheet via IFTTT web service Function                                            
+//----------------------------------------------------------------------------------------
+
+void makeIFTTTRequest(void * pvParameters){
+  for(;;){
+    if (send_enabled && send_data) {
+      Serial.print("Connecting to "); 
+      Serial.print(server);
+      
+      WiFiClient client;
+      int retries = 5;
+      while(!!!client.connect(server, 80) && (retries-- > 0)) {
+        Serial.print(".");
+      }
+      Serial.println();
+      if(!!!client.connected()) {
+        Serial.println("Failed to connect...");
+      }
+      
+      Serial.print("Request resource: "); 
+      Serial.println(resource);
+      
+      float sensor_Values[nbParam];
+      
+      char column_name[ ][30]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","CurrEnergHr","MeanSpeed","Time_100km","degrad_ratio","EstLeft_kWh","Energ_100km","Est_range"};;
+      
+      sensor_Values[0] = SOC;
+      sensor_Values[1] = Power;
+      sensor_Values[2] = BattMinT;
+      sensor_Values[3] = Heater;
+      sensor_Values[4] = Net_Ah;
+      sensor_Values[5] = Net_kWh;
+      sensor_Values[6] = AuxBattSOC;
+      sensor_Values[7] = AuxBattV;
+      sensor_Values[8] = Max_Pwr;
+      sensor_Values[9] = Max_Reg;  
+      sensor_Values[10] = BmsSOC;
+      sensor_Values[11] = MAXcellv;
+      sensor_Values[12] = MINcellv;
+      sensor_Values[13] = BATTv;
+      sensor_Values[14] = BATTc;
+      sensor_Values[15] = Speed;
+      sensor_Values[16] = Odometer;
+      sensor_Values[17] = CEC;
+      sensor_Values[18] = CED;
+      sensor_Values[19] = CDC;
+      sensor_Values[20] = CCC;
+      sensor_Values[21] = SOH;  
+      sensor_Values[22] = OPtimemins;
+      sensor_Values[23] = OUTDOORtemp;
+      sensor_Values[24] = INDOORtemp;
+      sensor_Values[25] = used_kwh;
+      sensor_Values[26] = left_kwh;
+      sensor_Values[27] = CurrEnergHr;
+      sensor_Values[28] = MeanSpeed;
+      sensor_Values[29] = Time_100km;
+      sensor_Values[30] = degrad_ratio;
+      sensor_Values[31] = EstLeft_kWh;
+      sensor_Values[32] = kWh_100km;
+      sensor_Values[33] = Est_range;
+      
+      String headerNames = "";
+      String payload ="";
+      
+      int i=0;
+      //Serial.print("initscan: ");Serial.println(initscan);
+      if(initscan){
+          initscan = false;
+          while(i!=nbParam) 
+        {
+          if(i==0){
+            headerNames = String("{\"value1\":\"") + column_name[i];
+            i++;
+          }
+          if(i==nbParam)
+            break;
+          headerNames = headerNames + "|||" + column_name[i];
+          i++;    
+        }
+        Serial.print("headerNames: ");Serial.println(headerNames);
+      
+          payload = headerNames;
+          //payload = String("{\"value1\":\"") + "SOC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSOC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSOC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
+        }
+        
+      else{
+        while(i!=nbParam) 
+        {
+          if(i==0)
+          {
+            payload = String("{\"value1\":\"") + sensor_Values[i];
+            i++;
+          }
+          if(i==nbParam)
+          {
+             break;
+          }
+          payload = payload + "|||" + sensor_Values[i];
+          i++;    
+        }
+      }
+      Serial.print("payload: ");Serial.println(payload);
+      
+      String jsonObject = payload + "\"}";                          
+                       
+      client.println(String("POST ") + resource + " HTTP/1.1");
+      client.println(String("Host: ") + server); 
+      client.println("Connection: close\r\nContent-Type: application/json");
+      client.print("Content-Length: ");
+      client.println(jsonObject.length());
+      client.println();
+      client.println(jsonObject);
+            
+      int timeout = 5; // 50 * 100mS = 5 seconds            
+      while(!!!client.available() && (timeout-- > 0)){
+        delay(100);
+      }
+      if(!!!client.available()) {
+        Serial.println("No response...");
+      }
+      while(client.available()){
+        Serial.write(client.read());
+      }
+      send_data = false;
+      
+      Serial.println();
+      Serial.println("closing connection");
+      client.stop();
+    }
+    vTaskDelay(10);
+  }
+}
 
 //--------------------------------------------------------------------------------------------
 //                        Button functions
@@ -959,8 +914,8 @@ void reset_trip() {
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
-    EEPROM.writeFloat(32, lost_ratio);    //save actual batt energy lost in Flash memory
-    EEPROM.writeFloat(36, Pwr_100km);    //save actual kWh/100 in Flash memory
+    EEPROM.writeFloat(32, degrad_ratio);    //save actual batt energy lost in Flash memory
+    EEPROM.writeFloat(36, kWh_100km);    //save actual kWh/100 in Flash memory
     EEPROM.commit();
     //Serial.println("Values saved to EEPROM");
 }
@@ -1008,9 +963,10 @@ void save_lost(char selector){
         }        
         if (selector == 'P' && DriveOn){
           DriveOn = false;
-          EEPROM.writeFloat(32, lost_ratio);
+          EEPROM.writeFloat(32, degrad_ratio);
           Serial.println("new_lost saved to EEPROM");
-          EEPROM.writeFloat(36, Pwr_100km);    //save actual kWh/100 in Flash memory
+          EEPROM.writeFloat(36, kWh_100km);    //save actual kWh/100 in Flash memory
+          EEPROM.commit();
         }
       }
 
@@ -1168,51 +1124,6 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
     }
 }
 
-void DisplayNumberPID(int pagePosition, float PID, const char* text, int warning, int alarm){                                                           
-                              
-        tft.setTextColor(TFT_WHITE,TFT_BLUE);        
-
-        switch (pagePosition){
-
-          case 1:
-                tft.drawString(text, tft.width() / 2, textLvl1, 1);
-                //check warning levels
-                if(PID < warning) draw_warningbox_lvl1();
-                else  draw_normalbox_lvl1();
-                tft.setTextPadding( tft.textWidth("88888", 2) );
-                tft.drawNumber( PID, tft.width()/2, drawLvl1, 2);                 
-                break;
-
-          case2:
-                tft.drawString(text, tft.width() / 2, textLvl2, 2);
-                //check warning levels
-                if(PID < warning) draw_warningbox_lvl2();
-                else  draw_normalbox_lvl2();
-                tft.setTextPadding( tft.textWidth("88888", 3) );
-                tft.drawNumber( PID, tft.width()/2, drawLvl2, 3);                 
-                break;
-
-          case 3:
-                tft.drawString(text, tft.width() / 2, textLvl3, 2);
-                //check warning levels
-                if(PID < warning) draw_warningbox_lvl3();
-                else  draw_normalbox_lvl3();
-                tft.setTextPadding( tft.textWidth("88888", 3) );
-                tft.drawNumber( PID, tft.width()/2, drawLvl3, 3);                 
-                break;
-
-          case 4:
-                tft.drawString(text, tft.width() / 2, textLvl4, 2);
-                //check warning levels
-                if(PID < warning) draw_warningbox_lvl4();
-                else  draw_normalbox_lvl4();
-                tft.setTextPadding( tft.textWidth("88888", 3) );
-                tft.drawNumber( PID, tft.width()/2, drawLvl4, 3);                 
-                break;
-        }
-}
-
-
 //-------------------------------------------------------------------------------------
 //             Start of Pages content definition         
 //-------------------------------------------------------------------------------------
@@ -1318,22 +1229,14 @@ void loop() {
 
   currentTimer = millis();  
   if ((currentTimer - previousTimer >= sendInterval) && send_enabled) {    
-    send_data = true;
+    send_data = true; // This will trigger logic to send data to Google sheet
     previousTimer = currentTimer;
   }
                
-  /*/////// Read each OBDII PIDs with 100ms interval /////////////////*/
+  /*/////// Read each OBDII PIDs /////////////////*/
 
   read_data();
-  /*
-  currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {   // 100ms timer
-      
-      previousMillis = currentMillis;  // save the last time      
-      
-      read_data();  // Read Datas from OBD 
-      }
-*/
+  
   /*/////// Display Page Number /////////////////*/
   
   if(!SetupOn){
@@ -1349,23 +1252,10 @@ void loop() {
                case 8: page9(); break;                                                           
                }
       }
-  /*/////// Display Setup Page/////////////////*/
-  else{
+  
+  else{ /*/////// Display Setup Page/////////////////*/
       SetupMode();
       }
-
-  /*/////// Send Data to Google Sheet /////////*/ 
-  
-  if (send_enabled && send_data) {
-        if (WiFi.status() != WL_CONNECTED) { 
-            //send_data = false;
-            send_enabled = false;       
-        }        
-        else
-        {
-          makeIFTTTRequest();          
-        }
-    }
                      
   ResetCurrTrip();
   
