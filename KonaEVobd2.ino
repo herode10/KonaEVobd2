@@ -51,8 +51,8 @@ Button bouton(BUTTON_PIN);
 Button bouton2(BUTTON_2_PIN);
 
 #define BATTtemp_Warning 40.0       // RED color above this value (Celsius)
-#define SOCpercent_Warning 10       // RED color below this value (Percent)
-#define AUXSOCpercent_Warning 60    // RED color below this value (Percent)
+#define SoCpercent_Warning 10       // RED color below this value (Percent)
+#define AUXSoCpercent_Warning 60    // RED color below this value (Percent)
 #define BATTv_LOW_Warning 320       // Main Battery Low Voltage warning (Volts)
 #define BATTv_HIGH_Warning 410      // Main Battery High Voltage warning (Volts)
 #define AUXBATTv_LOW_Warning 11.8   // Main Battery Low Voltage warning (Volts)
@@ -77,7 +77,7 @@ float BattMinT;
 float BattMaxT;
 float AuxBattV;
 float AuxBattC;
-float AuxBattSOC;      
+float AuxBattSoC;      
 float Batt12V;
 float BATTv;
 float BATTc;
@@ -90,17 +90,17 @@ float CDC;
 float CCC;
 float CalcCEC;
 float CalcCED;
-float BmsSOC;
+float BmsSoC;
 float Max_Pwr;
 float Max_Reg;
-float SOC;
+float SoC;
 float SOH;  
 float Heater;
 float COOLtemp;
 float OUTDOORtemp;
 float INDOORtemp;
 char SpdSelect;
-float Odometer;
+uint32_t Odometer;
 float Speed;
 byte TransSelByte;
 byte Park;
@@ -112,21 +112,27 @@ byte StatusWord;
 byte BMS_ign;
 float OPtimemins;
 float OPtimehours;
+float TireFL_P;
+float TireFR_P;
+float TireRL_P;
+float TireRR_P;
+float TireFL_T;
+float TireFR_T;
+float TireRL_T;
+float TireRR_T;
 float Power;
-float CurrEnergHr = 0;
 float CurrInitOdo = 0;
 float CurrInitCEC = 0;
 float CurrInitCED = 0;
-float CurrInitSOC= 0;
+float CurrInitSoC= 0;
 float CurrTripOdo;
 float CurrNet_kWh;
-float CurrUsedSOC;
+float CurrUsedSoC;
 float CurrTripDisc;
 float CurrTripReg;
-float TripEnergHr;
 float Prev_kWh = 0;
 float Net_kWh = 0;
-float UsedSOC = 0;
+float UsedSoC = 0;
 float Net_Ah = 0;
 float DischAh = 0;
 float RegenAh = 0;
@@ -136,19 +142,21 @@ float PrevOPtimemins;
 float TripOPtime;
 float CurrTimeInit;
 float CurrOPtime;
-float InitSOC = 0;
+float InitSoC = 0;
 float InitCEC = 0;
 float InitCED = 0;
 float InitCCC = 0;
 float InitCDC = 0;
+float PrevSoC = 0;
 float Regen = 0;
 float Discharg = 0;
-float LastSOC = 0;
-float integral; // variable to calculate energy between to soc values
-float interval; // variable to calculate energy between to soc values
-float return_kwh; // variable to calculate energy between to soc values
+float LastSoC = 0;
+double integral; // variable to calculate energy between to SoC values
+double interval; // variable to calculate energy between to SoC values
+float return_kwh; // variable to calculate energy between to SoC values
 float EstFull_kWh;
 float EstFull_Ah;
+float kWh_corr;
 float left_kwh;
 float used_kwh;
 float degrad_ratio;
@@ -157,6 +165,7 @@ float old_lost = 1;
 float EstLeft_kWh;
 float MeanSpeed;
 float Time_100km;
+float TripkWh_100km;
 float kWh_100km;
 float Est_range;
 bool DriveOn = false;
@@ -164,11 +173,12 @@ bool winter = false;
 bool SetupOn = false;
 bool StartWifi = true;
 bool initscan = false;
+bool InitRst = false;
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool send_data = false;
-int nbParam = 37;    //number of parameters to send to Google Sheet
+int nbParam = 43;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
@@ -255,8 +265,8 @@ void setup() {
   Net_kWh = EEPROM.readFloat(0);
   InitCED = EEPROM.readFloat(4);    
   InitCEC = EEPROM.readFloat(8);
-  InitSOC = EEPROM.readFloat(12);
-  UsedSOC = EEPROM.readFloat(16);
+  InitSoC = EEPROM.readFloat(12);
+  UsedSoC = EEPROM.readFloat(16);
   InitOdo = EEPROM.readFloat(20);
   InitCDC = EEPROM.readFloat(24);
   InitCCC = EEPROM.readFloat(28);
@@ -426,7 +436,7 @@ void read_data(){
           CED = ((convertToInt(results.frames[6], 5, 3) << 8) + convertToInt(results.frames[7], 1, 1)) * 0.1;
           CCC = ((convertToInt(results.frames[4], 7, 1) << 24) + convertToInt(results.frames[5], 1, 3)) * 0.1;
           CDC = convertToInt(results.frames[5], 4, 4) * 0.1;
-          BmsSOC = convertToInt(results.frames[1], 2, 1) * 0.5;
+          BmsSoC = convertToInt(results.frames[1], 2, 1) * 0.5;
           StatusWord = convertToInt(results.frames[7], 6, 1); // Extract byte that contain BMS status bits
           BMS_ign = bitRead(StatusWord,2);
           MAXcellv = convertToInt(results.frames[3], 7, 1) * 0.02;
@@ -448,7 +458,7 @@ void read_data(){
           processPayload(payload, payloadLen, results);
           Max_Pwr = convertToInt(results.frames[3], 2, 2) * 0.01;    
           Max_Reg = (((convertToInt(results.frames[2], 7, 1)) << 8) + convertToInt(results.frames[3], 1, 1)) * 0.01;
-          SOC = convertToInt(results.frames[5], 1, 1) * 0.5;
+          SoC = convertToInt(results.frames[5], 1, 1) * 0.5;
           SOH = convertToInt(results.frames[4], 2, 2) * 0.1;  
           int HeaterRaw = convertToInt(results.frames[3], 7, 1);
           if (HeaterRaw > 127){ //conversition for negative value
@@ -519,7 +529,7 @@ void read_data(){
           else{
             AuxBattC = ((AuxCurrByte1 * 256) + AuxCurrByte2) * 0.01;
           }          
-          AuxBattSOC = convertToInt(results.frames[3], 6, 1);
+          AuxBattSoC = convertToInt(results.frames[3], 6, 1);
           }
         break;
         
@@ -554,9 +564,27 @@ void read_data(){
 
           processPayload(payload, payloadLen, results);
           Speed = (((convertToInt(results.frames[1], 7, 1)) << 8) + convertToInt(results.frames[2], 1, 1)) * 0.1;
+          } 
+        break;
+
+      case 9:  
+        myELM327.sendCommand("AT SH 7A0");       //Set Speed Header 
+        if (myELM327.queryPID("22C00B")) {      // Service and Message PID
+          char* payload = myELM327.payload;
+          size_t payloadLen = myELM327.recBytes;
+
+          processPayload(payload, payloadLen, results);
+          TireFL_P = convertToInt(results.frames[1], 2, 1) * 0.2;
+          TireFL_T = convertToInt(results.frames[1], 3, 1) - 50;
+          TireFR_P = convertToInt(results.frames[1], 6, 1) * 0.2;
+          TireFR_T = convertToInt(results.frames[1], 7, 1) - 50;
+          TireRL_P = convertToInt(results.frames[2], 7, 1) * 0.2;
+          TireRL_T = convertToInt(results.frames[3], 1, 1) - 50;
+          TireRR_P = convertToInt(results.frames[2], 3, 1) * 0.2;
+          TireRR_T = convertToInt(results.frames[2], 4, 1) - 50;
           }        
         pid_counter = 0;
-        break;    
+        break;
   }
   
 
@@ -564,7 +592,7 @@ void read_data(){
     
   Power = (BATTv * BATTc) * 0.001;
 
-  if(!ResetOn){
+  if(!ResetOn){     // On power On, current trip values are resetted before executing the next code
     TripOdo = Odometer - InitOdo;
     
     CurrTripOdo = Odometer - CurrInitOdo;    
@@ -573,30 +601,51 @@ void read_data(){
 
     TripOPtime = CurrOPtime + PrevOPtimemins;
   
-    UsedSOC = InitSOC - SOC;
+    UsedSoC = InitSoC - SoC;
   
-    CurrUsedSOC = CurrInitSOC - SOC;
+    CurrUsedSoC = CurrInitSoC - SoC;
   
-    EstFull_Ah = 100 * Net_Ah / UsedSOC;
+    EstFull_Ah = 100 * Net_Ah / UsedSoC;
   
     CellVdiff = MAXcellv - MINcellv;
     
-    EstFull_kWh = 100 * Net_kWh / UsedSOC;
+    EstFull_kWh = 100 * Net_kWh / UsedSoC;
     
     if(Prev_kWh < Net_kWh){
-      used_kwh = calc_kwh(SOC, InitSOC) + 0,1;
-      left_kwh = calc_kwh(0, SOC) - 0,1;
+      kWh_corr += 0,1;
+      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      Prev_kWh = Net_kWh;
     }
     else if(Prev_kWh > Net_kWh){
-      used_kwh = calc_kwh(SOC, InitSOC) - 0,1;
-      left_kwh = calc_kwh(0, SOC) + 0,1;
+      kWh_corr -= 0,1;
+      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      Prev_kWh = Net_kWh;
     }
-    else{
-      used_kwh = calc_kwh(SOC, InitSOC);
-      left_kwh = calc_kwh(0, SOC);
+    else if(PrevSoC != SoC){
+      if(!InitRst){
+        kWh_corr = 0;
+        used_kwh = calc_kwh(SoC, InitSoC);
+        left_kwh = calc_kwh(0, SoC);
+        PrevSoC = SoC;
+        Prev_kWh = Net_kWh;
+      }
+      if(InitRst){
+        reset_trip();
+        kWh_corr = 0;
+        used_kwh = calc_kwh(SoC, InitSoC);
+        left_kwh = calc_kwh(0, SoC);
+        PrevSoC = SoC;
+        Prev_kWh = Net_kWh;
+        initscan = true;
+        InitRst = false;
+      }
     }
+  }
+  Serial.print("PrevSoC= ");Serial.println(PrevSoC);
       
-    if(used_kwh > 3){
+    if(used_kwh > 1){
       degrad_ratio = Net_kWh / used_kwh;
       Serial.print("degrad_ratio= ");Serial.println(degrad_ratio);
     }
@@ -607,9 +656,7 @@ void read_data(){
     EstLeft_kWh = left_kwh * degrad_ratio;
       
     RangeCalc();
-    save_lost(SpdSelect);
-  }
-  
+    save_lost(SpdSelect);  
 }
 
 //--------------------------------------------------------------------------------------------
@@ -621,7 +668,7 @@ void read_data(){
 float UpdateNetEnergy(){        
         if (InitCED == 0){ //if discharge value have been reinitiate to 0 then      
             InitCED = CED;  //initiate to current CED for initial CED value and            
-            InitSOC = SOC;  //initiate to current CED for initial SOC value and
+            InitSoC = SoC;  //initiate to current CED for initial SoC value and
             CurrInitCED = CED;
             }
         if (InitCDC == 0){
@@ -634,11 +681,10 @@ float UpdateNetEnergy(){
         if (InitCCC == 0){
             InitCCC = CCC;            
             }
-        Prev_kWh = Net_kWh;   
+                     
         Discharg = CED - InitCED;
         Regen = CEC - InitCEC;
-        Net_kWh = Discharg - Regen;
-        
+        Net_kWh = Discharg - Regen;        
         
         DischAh = CDC - InitCDC;        
         RegenAh = CCC - InitCCC;
@@ -649,26 +695,18 @@ float UpdateNetEnergy(){
         CurrNet_kWh = CurrTripDisc - CurrTripReg;        
 }
 
-
 //--------------------------------------------------------------------------------------------
 //                   Kilometer Range Calculation Function
 //--------------------------------------------------------------------------------------------
 
 float RangeCalc(){
-  CurrEnergHr = CurrNet_kWh * 60 / CurrOPtime;
-  TripEnergHr = Net_kWh * 60 / TripOPtime;  
   
   MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
-  if (MeanSpeed > 0){
-    Time_100km = 100 / MeanSpeed;
-  }
-  else{
-    Time_100km = 100 / 99999;
-  }
-  
-  if (MeanSpeed > 30 && CurrOPtime > 5 && !ResetOn){  
-    kWh_100km = CurrEnergHr * Time_100km;
+    
+  if (TripOdo && CurrTripOdo > 0 && !ResetOn){  
+    kWh_100km = CurrNet_kWh * 100 / CurrTripOdo;
     Serial.print("New_kWh_100km= ");Serial.println(kWh_100km);
+    TripkWh_100km = Net_kWh * 100 / TripOdo;
   }
   else{
     kWh_100km = old_kWh_100km;
@@ -684,18 +722,19 @@ float RangeCalc(){
 }
 
 //--------------------------------------------------------------------------------------------
-//                   Function to calculate energy between two SOC values
+//                   Function to calculate energy between two SoC values
 //--------------------------------------------------------------------------------------------
 
-float calc_kwh(float min_soc, float max_soc){
+float calc_kwh(float min_SoC, float max_SoC){
   
-  static int N = 50;
-  interval = (max_soc - min_soc) / N;
-  integral = 0;
-  float x = 0;
+  static int N = 25;
+  interval = (max_SoC - min_SoC) / N;
+  integral = 0,0;
+  double x = 0;
   for (int i = 0; i < N; ++i){
-    x = min_soc + interval * i;    
-    integral += ((0.00159 * x) + 0.562);  //64kWh battery energy equation
+    x = min_SoC + interval * i;    
+    //integral += ((0.00159 * x) + 0.562);  //64kWh battery energy equation
+    integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.00208 * x) + 0.5675);  //64kWh battery energy equation
   }
   return_kwh = integral * interval;
   return return_kwh;
@@ -726,19 +765,19 @@ void makeIFTTTRequest(void * pvParameters){
       
       float sensor_Values[nbParam];
       
-      char column_name[ ][15]={"SOC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSOC","AuxBattV","Max_Pwr","Max_Reg","BmsSOC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","TripOPtime","TripEnergHr","CurrOPtime","CurrEnergHr","MeanSpeed","Time_100km","degrad_ratio","EstLeft_kWh","Energ_100km","Est_range"};;
+      char column_name[ ][15]={"SoC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSoC","AuxBattV","Max_Pwr","Max_Reg","BmsSoC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","TripOPtime","CurrOPtime","MeanSpeed","TripkWh_100km","degrad_ratio","EstLeft_kWh","Energ_100km","Est_range","TireFL_P","TireFR_P","TireRL_P","TireRR_P","TireFL_T","TireFR_T","TireRL_T","TireRR_T"};;
       
-      sensor_Values[0] = SOC;
+      sensor_Values[0] = SoC;
       sensor_Values[1] = Power;
       sensor_Values[2] = BattMinT;
       sensor_Values[3] = Heater;
       sensor_Values[4] = Net_Ah;
       sensor_Values[5] = Net_kWh;
-      sensor_Values[6] = AuxBattSOC;
+      sensor_Values[6] = AuxBattSoC;
       sensor_Values[7] = AuxBattV;
       sensor_Values[8] = Max_Pwr;
       sensor_Values[9] = Max_Reg;  
-      sensor_Values[10] = BmsSOC;
+      sensor_Values[10] = BmsSoC;
       sensor_Values[11] = MAXcellv;
       sensor_Values[12] = MINcellv;
       sensor_Values[13] = BATTv;
@@ -756,15 +795,21 @@ void makeIFTTTRequest(void * pvParameters){
       sensor_Values[25] = used_kwh;
       sensor_Values[26] = left_kwh;
       sensor_Values[27] = TripOPtime;
-      sensor_Values[28] = TripEnergHr;
-      sensor_Values[29] = CurrOPtime;
-      sensor_Values[30] = CurrEnergHr;
-      sensor_Values[31] = MeanSpeed;
-      sensor_Values[32] = Time_100km;
-      sensor_Values[33] = degrad_ratio;
-      sensor_Values[34] = EstLeft_kWh;
-      sensor_Values[35] = kWh_100km;
-      sensor_Values[36] = Est_range;
+      sensor_Values[28] = CurrOPtime;      
+      sensor_Values[29] = MeanSpeed;
+      sensor_Values[30] = TripkWh_100km;
+      sensor_Values[31] = degrad_ratio;
+      sensor_Values[32] = EstLeft_kWh;
+      sensor_Values[33] = kWh_100km;
+      sensor_Values[34] = Est_range;
+      sensor_Values[35] = TireFL_P;
+      sensor_Values[36] = TireFR_P;
+      sensor_Values[37] = TireRL_P;
+      sensor_Values[38] = TireRR_P;
+      sensor_Values[39] = TireFL_T;
+      sensor_Values[40] = TireFR_T;
+      sensor_Values[41] = TireRL_T;
+      sensor_Values[42] = TireRR_T;    
       
       String headerNames = "";
       String payload ="";
@@ -787,7 +832,7 @@ void makeIFTTTRequest(void * pvParameters){
         Serial.print("headerNames: ");Serial.println(headerNames);
       
           payload = headerNames;
-          //payload = String("{\"value1\":\"") + "SOC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSOC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSOC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
+          //payload = String("{\"value1\":\"") + "SoC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSoC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSoC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
         }
         
       else{
@@ -852,8 +897,9 @@ void ButtonLoop() {
         if (millis() - InitMillis >= Longinterval){
           Serial.println("Button Long press");        
           if (screenNbr == 0){          
-            reset_trip();
-            initscan = true;          
+            InitRst = true;
+            PrevSoC = 0;
+            //initscan = true;          
             return;
           }
         }
@@ -914,12 +960,12 @@ void reset_trip() {
     Serial.println("saving");
     InitOdo = Odometer;                 
     InitCED = CED;  //initiate to current CED for initial CED value and
-    InitSOC = SOC;  //initiate to current CED for initial SOC value and          
+    InitSoC = SoC;  //initiate to current CED for initial SoC value and          
     InitCEC = CEC;  //initiate to current CEC for initial CEC value and
     InitCDC = CDC;
     InitCCC = CCC;
     Net_kWh = 0;
-    UsedSOC = 0;
+    UsedSoC = 0;
     Discharg = 0;
     Regen = 0;
     Net_Ah = 0;
@@ -929,8 +975,8 @@ void reset_trip() {
     EEPROM.writeFloat(0, Net_kWh);    //save initial CED to Flash memory
     EEPROM.writeFloat(4, InitCED);    //save initial CED to Flash memory
     EEPROM.writeFloat(8, InitCEC);    //save initial CEC to Flash memory  
-    EEPROM.writeFloat(12, InitSOC);    //save initial SOC to Flash memory
-    EEPROM.writeFloat(16, UsedSOC);    //save initial SOC to Flash memory
+    EEPROM.writeFloat(12, InitSoC);    //save initial SoC to Flash memory
+    EEPROM.writeFloat(16, UsedSoC);    //save initial SoC to Flash memory
     EEPROM.writeFloat(20, InitOdo);    //save initial Odometer to Flash memory
     EEPROM.writeFloat(24, InitCDC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
@@ -939,17 +985,24 @@ void reset_trip() {
     EEPROM.writeFloat(44, PrevOPtimemins);    //save initial time to Flash memory    
     EEPROM.commit();
     Serial.println("Values saved to EEPROM");
+    CurrInitCED = CED;
+    CurrInitCEC = CEC;
+    CurrInitOdo = Odometer;
+    CurrInitSoC = SoC;
+    CurrTripReg = 0;
+    CurrTripDisc = 0;
+    CurrTimeInit = OPtimemins;
 }
 
 /*////////////// Current Trip Reset ///////////////// */
 
 void ResetCurrTrip(){
   
-    if (BMS_ign && ResetOn && (SOC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){
+    if (BMS_ign && ResetOn && (SoC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){
         CurrInitCED = CED;
         CurrInitCEC = CEC;
         CurrInitOdo = Odometer;
-        CurrInitSOC = SOC;
+        CurrInitSoC = SoC;
         CurrTripReg = 0;
         CurrTripDisc = 0;
         CurrTimeInit = OPtimemins;
@@ -1154,7 +1207,7 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
 void page1(){    
                       
         DisplayFloatPID(1, "TripOdo", TripOdo, 0, 0, 0, 0, 0);
-        DisplayFloatPID(2, "UsedSOC", UsedSOC, 1, 0, 0, 0, 0);
+        DisplayFloatPID(2, "UsedSoC", UsedSoC, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "EstLeft_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);         
 }
@@ -1163,7 +1216,7 @@ void page1(){
 /*///////////////// Display Page 2 //////////////////////*/
 void page2(){
           
-        DisplayFloatPID(1, "CurrEnergHr", CurrEnergHr, 1, 0, 0, 0, 0);
+        DisplayFloatPID(1, "kWh/100km", kWh_100km, 1, 0, 0, 0, 0);
         DisplayFloatPID(2, "Est_range", Est_range, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_Ah", EstFull_Ah, 1, 0, 0, 0, 0);
@@ -1186,7 +1239,7 @@ void page4(){
         DisplayFloatPID(1, "BattMinT", BattMinT, 1, 0, 0, 0, 00);
         DisplayFloatPID(2, "Heater", Heater, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Power", Power, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "SOC", SOC, 1, 0, 0, 0, 0);
+        DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);
 }
 /*///////////////// End of Display Page 4 //////////////////////*/
 
@@ -1196,7 +1249,7 @@ void page5(){
         DisplayFloatPID(1, "Max_Pwr", Max_Pwr, 1, 0, 0, 0, 0);
         DisplayFloatPID(2, "Power", Power, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "BattMinT", BattMinT, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "SOC", SOC, 1, 0, 0, 0, 0);       
+        DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);       
        
 }
 /*///////////////// End of Display Page 5 //////////////////////*/
@@ -1206,15 +1259,15 @@ void page6(){
                  
         DisplayFloatPID(1, "Trip_kWh", CurrNet_kWh, 1, 0, 0, 0, 0);
         DisplayFloatPID(2, "TripOdo", CurrTripOdo, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "TripSOC", CurrUsedSOC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "AuxBattSOC", AuxBattSOC, 1, 0, 0, 0, 0);     
+        DisplayFloatPID(3, "TripSoC", CurrUsedSoC, 1, 0, 0, 0, 0);
+        DisplayFloatPID(4, "AuxBattSoC", AuxBattSoC, 1, 0, 0, 0, 0);     
 }
 /*///////////////// End of Display Page 6 //////////////////////*/
 
 /*///////////////// Display Page 7 //////////////////////*/
 void page7(){
         
-        DisplayFloatPID(1, "BmsSOC", BmsSOC, 1, 0, 0, 0, 0);        
+        DisplayFloatPID(1, "BmsSoC", BmsSoC, 1, 0, 0, 0, 0);        
         DisplayFloatPID(2, "MAXcellv", MAXcellv, 2, 0, 0, 0, 0);
         DisplayFloatPID(3, "CellVdiff", CellVdiff, 2, 0, 0, 0, 0);
         DisplayFloatPID(4, "SOH", SOH, 1, 0, 0, 0, 0);
