@@ -88,8 +88,6 @@ float CEC;
 float CED;
 float CDC;
 float CCC;
-float CalcCEC;
-float CalcCED;
 float BmsSoC;
 float Max_Pwr;
 float Max_Reg;
@@ -214,7 +212,21 @@ dataFrames results; // this struct will hold the results
 
 void setup() {
 
+  /*////////////////////////////////////////////////////////////////*/   
+  /*              Open serial monitor communications                */
+  /*////////////////////////////////////////////////////////////////*/
+
+  Serial.begin(9600);  
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+    
+  Serial.println("Serial Monitor - STARTED");
+  
+
   //pinMode(VESSoff, OUTPUT); // enable output pin that activate a relay to temporary disable the VESS
+
+  /*//////////////Initialise buttons ////////////////*/
 
   bouton.begin(); // left button
   bouton2.begin(); // right button
@@ -273,23 +285,8 @@ void setup() {
   old_lost = EEPROM.readFloat(32);
   old_kWh_100km = EEPROM.readFloat(36);
   winter = EEPROM.readBool(40);
-  PrevOPtimemins = EEPROM.readFloat(44);  
-  
-  
-/*////////////////////////////////////////////////////////////////*/   
-/*              Open serial monitor communications                */
-/*////////////////////////////////////////////////////////////////*/
-
-  Serial.begin(9600);  
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-    
-  Serial.println("Serial Monitor - STARTED");
-
-  Serial.print("old_lost= ");Serial.println(old_lost);
-  Serial.print("old_kWh_100km= ");Serial.println(old_kWh_100km);
-    
+  PrevOPtimemins = EEPROM.readFloat(44);
+      
 /*/////////////////////////////////////////////////////////////////*/
 /*                    CONNECTION TO OBDII                          */
 /*/////////////////////////////////////////////////////////////////*/
@@ -310,6 +307,8 @@ void setup() {
 
   initscan = true; // To write header name on Google Sheet on power up
 
+  /*//////////////Initialise Task on core0 to send data on Google Sheet ////////////////*/
+  
   xTaskCreatePinnedToCore(
     makeIFTTTRequest, /* Function to implement the task */
     "Task1", /* Name of the task */
@@ -568,7 +567,7 @@ void read_data(){
         break;
 
       case 9:  
-        myELM327.sendCommand("AT SH 7A0");       //Set Speed Header 
+        myELM327.sendCommand("AT SH 7A0");       //Set BCM Header 
         if (myELM327.queryPID("22C00B")) {      // Service and Message PID
           char* payload = myELM327.payload;
           size_t payloadLen = myELM327.recBytes;
@@ -612,26 +611,39 @@ void read_data(){
     EstFull_kWh = 100 * Net_kWh / UsedSoC;
     
     if(Prev_kWh < Net_kWh){
-      kWh_corr += 0,1;
+      kWh_corr += 0.1;
       used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
       left_kwh = calc_kwh(0, SoC) - kWh_corr;
       Prev_kWh = Net_kWh;
     }
     else if(Prev_kWh > Net_kWh){
-      kWh_corr -= 0,1;
+      kWh_corr -= 0.1;
       used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
       left_kwh = calc_kwh(0, SoC) - kWh_corr;
       Prev_kWh = Net_kWh;
     }
     else if(PrevSoC != SoC){
       if(!InitRst){
-        kWh_corr = 0;
-        used_kwh = calc_kwh(SoC, InitSoC);
-        left_kwh = calc_kwh(0, SoC);
-        PrevSoC = SoC;
-        Prev_kWh = Net_kWh;
+        if(Net_kWh < 0.2){
+          Serial.print("Net_kWh= ");Serial.println(Net_kWh);
+          Serial.print("2nd Reset");
+          reset_trip();
+          kWh_corr = 0;
+          used_kwh = calc_kwh(SoC, InitSoC);
+          left_kwh = calc_kwh(0, SoC);
+          PrevSoC = SoC;
+          Prev_kWh = Net_kWh;
+        }
+        else{
+          kWh_corr = 0;
+          used_kwh = calc_kwh(SoC, InitSoC);
+          left_kwh = calc_kwh(0, SoC);
+          PrevSoC = SoC;
+          Prev_kWh = Net_kWh;
+        }
       }
       if(InitRst){
+        Serial.print("1st Reset");
         reset_trip();
         kWh_corr = 0;
         used_kwh = calc_kwh(SoC, InitSoC);
@@ -643,8 +655,7 @@ void read_data(){
       }
     }
   }
-  Serial.print("PrevSoC= ");Serial.println(PrevSoC);
-      
+        
     if(used_kwh > 1){
       degrad_ratio = Net_kWh / used_kwh;
       Serial.print("degrad_ratio= ");Serial.println(degrad_ratio);
