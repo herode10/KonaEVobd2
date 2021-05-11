@@ -14,6 +14,8 @@
 #include "BT_communication.h"
 #include "Wifi_connection.h"
 #include "FreeRTOS.h"
+#include "HTTPClient.h"
+#include "HTTPSRedirect.h"
 
 #define DEBUG_PORT Serial
 
@@ -172,19 +174,31 @@ bool SetupOn = false;
 bool StartWifi = true;
 bool initscan = false;
 bool InitRst = false;
+bool kWh_update = false;
+bool corr_update = false;
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool send_data = false;
-int nbParam = 43;    //number of parameters to send to Google Sheet
+int nbParam = 45;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
 
-const char* resource = "/trigger/konaEv_readings/with/key/dqNCA93rEfn0CAeqkVRXvl";
+const char* resource = "/trigger/SendData/with/key/dqNCA93rEfn0CAeqkVRXvl";
 
 // Maker Webhooks IFTTT
 const char* server = "maker.ifttt.com";
+
+/*////// Variables for Google Sheet data transfer ////////////*/
+const int httpsPort = 443;
+const char* fingerprint = "A0:92:D5:4F:FD:BB:96:90:40:7F:61:75:64:CD:BB:42:F7:15:4F:58";
+const char* host = "script.google.com";
+const char *GScriptId = "AKfycbyWlbpQIBM2NEVZOU1FQ8zpJ3hYuwJK-L4Qk81cnsUaEhHDN25hIBuhImjuRY3vJL9hyg";
+String url = String("/macros/s/") + GScriptId + "/exec?";
+String payload2 = "id=Sensor_1&SOC=67.00&Power=-6.47&BattMinT=8.00&BATTv=378.10&AuxBattSOC=86.00";
+String url2 = "https://script.google.com/macros/s/AKfycbyWlbpQIBM2NEVZOU1FQ8zpJ3hYuwJK-L4Qk81cnsUaEhHDN25hIBuhImjuRY3vJL9hyg/exec?id=Sensor_1&SOC=67.00&Power=-6.47&BattMinT=8.00&BATTv=378.10&AuxBattSOC=86.00";
+static bool flag = false;
 
 /*////// Variables for OBD data timing ////////////*/
 const long obd_update = 100; // interval to update OBD data (milliseconds)
@@ -286,7 +300,8 @@ void setup() {
   old_kWh_100km = EEPROM.readFloat(36);
   winter = EEPROM.readBool(40);
   PrevOPtimemins = EEPROM.readFloat(44);
-      
+  kWh_corr = EEPROM.readFloat(48);
+        
 /*/////////////////////////////////////////////////////////////////*/
 /*                    CONNECTION TO OBDII                          */
 /*/////////////////////////////////////////////////////////////////*/
@@ -311,12 +326,13 @@ void setup() {
   
   xTaskCreatePinnedToCore(
     makeIFTTTRequest, /* Function to implement the task */
-    "Task1", /* Name of the task */
+    "makeIFTTTRequest", /* Name of the task */
     10000,  /* Stack size in words */
     NULL,  /* Task input parameter */
-    1,  /* Priority of the task */
+    5,  /* Priority of the task */
     &Task1,  /* Task handle. */
     0); /* Core where the task should run */
+    Serial.println("Task started");
     delay(500);
   
 }   
@@ -591,7 +607,7 @@ void read_data(){
     
   Power = (BATTv * BATTc) * 0.001;
 
-  if(!ResetOn){     // On power On, current trip values are resetted before executing the next code
+  if(!ResetOn){     // On power On, wait for current trip values to be re-initialized before executing the next lines of code
     TripOdo = Odometer - InitOdo;
     
     CurrTripOdo = Odometer - CurrInitOdo;    
@@ -609,40 +625,9 @@ void read_data(){
     CellVdiff = MAXcellv - MINcellv;
     
     EstFull_kWh = 100 * Net_kWh / UsedSoC;
-    
-    if(Prev_kWh < Net_kWh){
-      kWh_corr += 0.1;
-      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
-      left_kwh = calc_kwh(0, SoC) - kWh_corr;
-      Prev_kWh = Net_kWh;
-    }
-    else if(Prev_kWh > Net_kWh){
-      kWh_corr -= 0.1;
-      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
-      left_kwh = calc_kwh(0, SoC) - kWh_corr;
-      Prev_kWh = Net_kWh;
-    }
-    else if(PrevSoC != SoC){
-      if(!InitRst){
-        if(Net_kWh < 0.2){
-          Serial.print("Net_kWh= ");Serial.println(Net_kWh);
-          Serial.print("2nd Reset");
-          reset_trip();
-          kWh_corr = 0;
-          used_kwh = calc_kwh(SoC, InitSoC);
-          left_kwh = calc_kwh(0, SoC);
-          PrevSoC = SoC;
-          Prev_kWh = Net_kWh;
-        }
-        else{
-          kWh_corr = 0;
-          used_kwh = calc_kwh(SoC, InitSoC);
-          left_kwh = calc_kwh(0, SoC);
-          PrevSoC = SoC;
-          Prev_kWh = Net_kWh;
-        }
-      }
-      if(InitRst){
+
+    if(PrevSoC > SoC){  // perform "used_kWh" and "left_kWh" when SoC decreases
+      if(InitRst){  // On Trip reset, initial kWh calculation
         Serial.print("1st Reset");
         reset_trip();
         kWh_corr = 0;
@@ -653,6 +638,42 @@ void read_data(){
         initscan = true;
         InitRst = false;
       }
+      if(!InitRst){
+        if(Net_kWh < 0.2){  // After a Trip Reset, perform a new reset if SoC changed without a Net_kWh increase (in case SoC was just about to change when the reset was performed)
+          Serial.print("Net_kWh= ");Serial.println(Net_kWh);
+          Serial.print("2nd Reset");
+          reset_trip();
+          kWh_corr = 0;
+          used_kwh = calc_kwh(SoC, InitSoC);
+          left_kwh = calc_kwh(0, SoC);
+          PrevSoC = SoC;
+          Prev_kWh = Net_kWh;
+          kWh_update = true;
+        }
+        else{ // Normal kWh calculation when SoC changes
+          kWh_corr = 0;
+          used_kwh = calc_kwh(SoC, InitSoC);
+          left_kwh = calc_kwh(0, SoC);
+          PrevSoC = SoC;
+          Prev_kWh = Net_kWh;
+          kWh_update = true;
+        }
+      }
+        
+    }
+    else if(Prev_kWh < Net_kWh){  // since the SoC has only 0.5 kWh resolution, when the Net_kWh increases, a 0.1 kWh is added to the kWh calculation to interpolate until next SoC change.
+      kWh_corr += 0.1;
+      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      Prev_kWh = Net_kWh;
+      corr_update = true;
+    }
+    else if(Prev_kWh > Net_kWh){    // since the SoC has only 0.5 kWh resolution, when the Net_kWh decreases, a 0.1 kWh is substracted to the kWh calculation to interpolate until next SoC change.
+      kWh_corr -= 0.1;
+      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      Prev_kWh = Net_kWh;
+      corr_update = true;
     }
   }
         
@@ -745,7 +766,7 @@ float calc_kwh(float min_SoC, float max_SoC){
   for (int i = 0; i < N; ++i){
     x = min_SoC + interval * i;    
     //integral += ((0.00159 * x) + 0.562);  //64kWh battery energy equation
-    integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.00208 * x) + 0.5675);  //64kWh battery energy equation
+    integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002133 * x) + 0.565);  //64kWh battery energy equation
   }
   return_kwh = integral * interval;
   return return_kwh;
@@ -776,7 +797,7 @@ void makeIFTTTRequest(void * pvParameters){
       
       float sensor_Values[nbParam];
       
-      char column_name[ ][15]={"SoC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSoC","AuxBattV","Max_Pwr","Max_Reg","BmsSoC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","Calc_Used","Calc_Left","TripOPtime","CurrOPtime","MeanSpeed","TripkWh_100km","degrad_ratio","EstLeft_kWh","Energ_100km","Est_range","TireFL_P","TireFR_P","TireRL_P","TireRR_P","TireFL_T","TireFR_T","TireRL_T","TireRR_T"};;
+      char column_name[ ][15]={"SoC","Power","BattMinT","Heater","Net_Ah","Net_kWh","AuxBattSoC","AuxBattV","Max_Pwr","Max_Reg","BmsSoC","MAXcellv","MINcellv","BATTv","BATTc","Speed","Odometer","CEC","CED","CDC","CCC","SOH","OPtimemins","OUTDOORtemp","INDOORtemp","kWh_update","corr_update","Calc_Used","Calc_Left","TripOPtime","CurrOPtime","MeanSpeed","TripkWh_100km","degrad_ratio","EstLeft_kWh","Energ_100km","Est_range","TireFL_P","TireFR_P","TireRL_P","TireRR_P","TireFL_T","TireFR_T","TireRL_T","TireRR_T"};;
       
       sensor_Values[0] = SoC;
       sensor_Values[1] = Power;
@@ -803,24 +824,27 @@ void makeIFTTTRequest(void * pvParameters){
       sensor_Values[22] = OPtimemins;
       sensor_Values[23] = OUTDOORtemp;
       sensor_Values[24] = INDOORtemp;
-      sensor_Values[25] = used_kwh;
-      sensor_Values[26] = left_kwh;
-      sensor_Values[27] = TripOPtime;
-      sensor_Values[28] = CurrOPtime;      
-      sensor_Values[29] = MeanSpeed;
-      sensor_Values[30] = TripkWh_100km;
-      sensor_Values[31] = degrad_ratio;
-      sensor_Values[32] = EstLeft_kWh;
-      sensor_Values[33] = kWh_100km;
-      sensor_Values[34] = Est_range;
-      sensor_Values[35] = TireFL_P;
-      sensor_Values[36] = TireFR_P;
-      sensor_Values[37] = TireRL_P;
-      sensor_Values[38] = TireRR_P;
-      sensor_Values[39] = TireFL_T;
-      sensor_Values[40] = TireFR_T;
-      sensor_Values[41] = TireRL_T;
-      sensor_Values[42] = TireRR_T;    
+      sensor_Values[25] = kWh_update;
+      sensor_Values[26] = corr_update;
+      sensor_Values[27] = used_kwh;
+      sensor_Values[28] = left_kwh;
+      sensor_Values[29] = TripOPtime;
+      sensor_Values[30] = CurrOPtime;      
+      sensor_Values[31] = MeanSpeed;
+      sensor_Values[32] = TripkWh_100km;
+      sensor_Values[33] = degrad_ratio;
+      sensor_Values[34] = EstLeft_kWh;
+      sensor_Values[35] = kWh_100km;
+      sensor_Values[36] = Est_range;
+      sensor_Values[37] = TireFL_P;
+      sensor_Values[38] = TireFR_P;
+      sensor_Values[39] = TireRL_P;
+      sensor_Values[40] = TireRR_P;
+      sensor_Values[41] = TireFL_T;
+      sensor_Values[42] = TireFR_T;
+      sensor_Values[43] = TireRL_T;
+      sensor_Values[44] = TireRR_T;
+          
       
       String headerNames = "";
       String payload ="";
@@ -885,6 +909,8 @@ void makeIFTTTRequest(void * pvParameters){
         Serial.write(client.read());
       }
       send_data = false;
+      kWh_update = false;
+      corr_update = false;
       
       Serial.println();
       Serial.println("closing connection");
@@ -965,7 +991,7 @@ void ButtonLoop() {
 
 /*////////////// Full Trip Reset ///////////////// */
 
-void reset_trip() {
+void reset_trip() { //Overall trip reset. Automatic if the car has been recharged to the same level as previous charge or if left button is pressed for more then 3 secondes
   
     Serial.println("saving");
     InitOdo = Odometer;                 
@@ -976,6 +1002,7 @@ void reset_trip() {
     InitCCC = CCC;
     Net_kWh = 0;
     UsedSoC = 0;
+    kWh_corr = 0;
     Discharg = 0;
     Regen = 0;
     Net_Ah = 0;
@@ -992,7 +1019,7 @@ void reset_trip() {
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(32, degrad_ratio);    //save actual batt energy lost in Flash memory
     EEPROM.writeFloat(36, kWh_100km);    //save actual kWh/100 in Flash memory
-    EEPROM.writeFloat(44, PrevOPtimemins);    //save initial time to Flash memory    
+    EEPROM.writeFloat(44, PrevOPtimemins);    //save initial time to Flash memory       
     EEPROM.commit();
     Serial.println("Values saved to EEPROM");
     CurrInitCED = CED;
@@ -1000,15 +1027,15 @@ void reset_trip() {
     CurrInitOdo = Odometer;
     CurrInitSoC = SoC;
     CurrTripReg = 0;
-    CurrTripDisc = 0;
+    CurrTripDisc = 0;    
     CurrTimeInit = OPtimemins;
 }
 
 /*////////////// Current Trip Reset ///////////////// */
 
-void ResetCurrTrip(){
+void ResetCurrTrip(){ // when the car is turned On, current trip values are resetted.
   
-    if (BMS_ign && ResetOn && (SoC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){
+    if (BMS_ign && ResetOn && (SoC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){ // ResetOn condition might be enough, might need to update code...        
         CurrInitCED = CED;
         CurrInitCEC = CEC;
         CurrInitOdo = Odometer;
@@ -1017,6 +1044,10 @@ void ResetCurrTrip(){
         CurrTripDisc = 0;
         CurrTimeInit = OPtimemins;
         Serial.println("Trip Reset");
+        Prev_kWh = Net_kWh;
+        used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
+        left_kwh = calc_kwh(0, SoC) - kWh_corr;
+        PrevSoC = SoC;
         ResetOn = false;
   }
 }
@@ -1039,18 +1070,19 @@ void setVessOff(char selector){
         }
       }
 
-/*//////Function to save current lost //////////*/
+/*//////Function to save some variable before turn off the car //////////*/
 
 void save_lost(char selector){  
         if (selector == 'D' && !DriveOn){ 
           DriveOn = true;
         }        
-        if (selector == 'P' && DriveOn){
+        if (selector == 'P' && DriveOn){  // when the selector is set to Park, some values are saved to be used the next time the car is started
           DriveOn = false;
           EEPROM.writeFloat(32, degrad_ratio);
           Serial.println("new_lost saved to EEPROM");
           EEPROM.writeFloat(36, kWh_100km);    //save actual kWh/100 in Flash memory
-          EEPROM.writeFloat(44, TripOPtime);
+          EEPROM.writeFloat(44, TripOPtime);  //save initial trip time to Flash memory
+          EEPROM.writeFloat(48, kWh_corr);    //save cummulative kWh correction (between 2 SoC values) to Flash memory
           EEPROM.commit();
         }
       }
