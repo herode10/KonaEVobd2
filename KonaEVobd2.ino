@@ -16,6 +16,7 @@
 #include "FreeRTOS.h"
 #include "HTTPClient.h"
 #include "HTTPSRedirect.h"
+#include "WiFiClientSecure.h"
 
 #define DEBUG_PORT Serial
 
@@ -176,14 +177,17 @@ bool initscan = false;
 bool InitRst = false;
 bool kWh_update = false;
 bool corr_update = false;
+int update_lock = 0;
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
 bool send_data = false;
+bool data_sent = false;
 int nbParam = 45;    //number of parameters to send to Google Sheet
 unsigned long sendInterval = 5000;
 unsigned long currentTimer = 0;
 unsigned long previousTimer = 0;
+bool sendIntervalOn = false;
 
 const char* resource = "/trigger/SendData/with/key/dqNCA93rEfn0CAeqkVRXvl";
 
@@ -661,21 +665,37 @@ void read_data(){
       }
         
     }
-    else if(Prev_kWh < Net_kWh){  // since the SoC has only 0.5 kWh resolution, when the Net_kWh increases, a 0.1 kWh is added to the kWh calculation to interpolate until next SoC change.
+    else if((Prev_kWh < Net_kWh) & !kWh_update){  // since the SoC has only 0.5 kWh resolution, when the Net_kWh increases, a 0.1 kWh is added to the kWh calculation to interpolate until next SoC change.
       kWh_corr += 0.1;
       used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
       left_kwh = calc_kwh(0, SoC) - kWh_corr;
       Prev_kWh = Net_kWh;
       corr_update = true;
     }
-    else if(Prev_kWh > Net_kWh){    // since the SoC has only 0.5 kWh resolution, when the Net_kWh decreases, a 0.1 kWh is substracted to the kWh calculation to interpolate until next SoC change.
+    else if((Prev_kWh > Net_kWh) & !kWh_update){    // since the SoC has only 0.5 kWh resolution, when the Net_kWh decreases, a 0.1 kWh is substracted to the kWh calculation to interpolate until next SoC change.
       kWh_corr -= 0.1;
       used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
       left_kwh = calc_kwh(0, SoC) - kWh_corr;
       Prev_kWh = Net_kWh;
       corr_update = true;
     }
-  }
+    /*
+    if(sendIntervalOn | data_sent){ // add condition so "kWh_corr" is not trigger before at less 2 cycles after a "kWh_update"
+      if(kWh_update){
+        Prev_kWh = Net_kWh;
+        update_lock ++;
+        data_sent = false;      
+          if(update_lock = 2){
+            kWh_update = false;
+            update_lock = 0;
+          }
+      }      
+      if(corr_update){
+        corr_update = false;
+      }      
+      sendIntervalOn = false;
+    }    */
+  }  
         
     if(used_kwh > 1){
       degrad_ratio = Net_kWh / used_kwh;
@@ -735,14 +755,15 @@ float RangeCalc(){
   
   MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
     
-  if (TripOdo && CurrTripOdo > 0 && !ResetOn){  
-    kWh_100km = CurrNet_kWh * 100 / CurrTripOdo;
-    Serial.print("New_kWh_100km= ");Serial.println(kWh_100km);
+  if (CurrTripOdo > 10 && !ResetOn){  
+    kWh_100km = CurrNet_kWh * 100 / CurrTripOdo;    
     TripkWh_100km = Net_kWh * 100 / TripOdo;
+  }
+  else if (CurrTripOdo > 2 && !ResetOn){
+    kWh_100km = (0.3 * (Net_kWh * 100 / TripOdo)) + (0.7 * old_kWh_100km);    
   }
   else{
     kWh_100km = old_kWh_100km;
-    Serial.print("kWh_100km= ");Serial.println(kWh_100km);
   }
   
   if (kWh_100km > 1){
@@ -909,13 +930,22 @@ void makeIFTTTRequest(void * pvParameters){
         Serial.write(client.read());
       }
       send_data = false;
-      kWh_update = false;
-      corr_update = false;
+      if(kWh_update){
+        Prev_kWh = Net_kWh;
+        update_lock ++;              
+          if(update_lock = 2){
+            kWh_update = false;
+            update_lock = 0;
+          }
+      }      
+      if(corr_update){
+        corr_update = false;
+      }          
       
       Serial.println();
       Serial.println("closing connection");
       client.stop();
-    }
+    }    
     vTaskDelay(10);
   }
 }
@@ -1345,10 +1375,17 @@ void loop() {
   ButtonLoop();
 
   currentTimer = millis();  
-  if ((currentTimer - previousTimer >= sendInterval) && send_enabled) {    
-    send_data = true; // This will trigger logic to send data to Google sheet
-    previousTimer = currentTimer;
-  }
+  if (currentTimer - previousTimer >= sendInterval) {    
+    if (send_enabled){
+      send_data = true; // This will trigger logic to send data to Google sheet
+      previousTimer = currentTimer;
+    }
+  /*
+    else if (!send_enabled){
+      sendIntervalOn = true;      
+      previousTimer = currentTimer;
+    }*/
+  } 
                
   /*/////// Read each OBDII PIDs /////////////////*/
 
