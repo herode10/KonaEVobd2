@@ -630,7 +630,7 @@ void read_data(){
     
     EstFull_kWh = 100 * Net_kWh / UsedSoC;
 
-    if(PrevSoC > SoC){  // perform "used_kWh" and "left_kWh" when SoC decreases
+    if(PrevSoC != SoC){  // perform "used_kWh" and "left_kWh" when SoC changes
       if(InitRst){  // On Trip reset, initial kWh calculation
         Serial.print("1st Reset");
         reset_trip();
@@ -642,8 +642,8 @@ void read_data(){
         initscan = true;
         InitRst = false;
       }
-      if(!InitRst){
-        if(Net_kWh < 0.2){  // After a Trip Reset, perform a new reset if SoC changed without a Net_kWh increase (in case SoC was just about to change when the reset was performed)
+      if(!InitRst){ // kWh calculation when the Initial reset is not active
+        if((Net_kWh < 0.2) & (PrevSoC > SoC)){  // After a Trip Reset, perform a new reset if SoC changed without a Net_kWh increase (in case SoC was just about to change when the reset was performed)
           Serial.print("Net_kWh= ");Serial.println(Net_kWh);
           Serial.print("2nd Reset");
           reset_trip();
@@ -654,7 +654,7 @@ void read_data(){
           Prev_kWh = Net_kWh;
           kWh_update = true;
         }
-        else{ // Normal kWh calculation when SoC changes
+        else if (PrevSoC > SoC){ // Normal kWh calculation when SoC decreases
           kWh_corr = 0;
           used_kwh = calc_kwh(SoC, InitSoC);
           left_kwh = calc_kwh(0, SoC);
@@ -667,39 +667,33 @@ void read_data(){
     }
     else if((Prev_kWh < Net_kWh) & !kWh_update){  // since the SoC has only 0.5 kWh resolution, when the Net_kWh increases, a 0.1 kWh is added to the kWh calculation to interpolate until next SoC change.
       kWh_corr += 0.1;
-      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
-      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      used_kwh = calc_kwh(PrevSoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, PrevSoC) - kWh_corr;
       Prev_kWh = Net_kWh;
       corr_update = true;
     }
     else if((Prev_kWh > Net_kWh) & !kWh_update){    // since the SoC has only 0.5 kWh resolution, when the Net_kWh decreases, a 0.1 kWh is substracted to the kWh calculation to interpolate until next SoC change.
       kWh_corr -= 0.1;
-      used_kwh = calc_kwh(SoC, InitSoC) + kWh_corr;
-      left_kwh = calc_kwh(0, SoC) - kWh_corr;
+      used_kwh = calc_kwh(PrevSoC, InitSoC) + kWh_corr;
+      left_kwh = calc_kwh(0, PrevSoC) - kWh_corr;
       Prev_kWh = Net_kWh;
       corr_update = true;
     }
-    /*
-    if(sendIntervalOn | data_sent){ // add condition so "kWh_corr" is not trigger before at less 2 cycles after a "kWh_update"
+    
+    if(sendIntervalOn){ // add condition so "kWh_corr" is not trigger before a cycle after a "kWh_update" when wifi is not connected
       if(kWh_update){
-        Prev_kWh = Net_kWh;
-        update_lock ++;
-        data_sent = false;      
-          if(update_lock = 2){
-            kWh_update = false;
-            update_lock = 0;
-          }
-      }      
+        Prev_kWh = Net_kWh;        
+        kWh_update = false; // reset kWh_update so correction logic starts again         
+      }            
       if(corr_update){
-        corr_update = false;
+        corr_update = false;  // reset corr_update since it's not being recorded 
       }      
       sendIntervalOn = false;
-    }    */
+    }    
   }  
         
     if(used_kwh > 1){
-      degrad_ratio = Net_kWh / used_kwh;
-      Serial.print("degrad_ratio= ");Serial.println(degrad_ratio);
+      degrad_ratio = Net_kWh / used_kwh;      
     }
     else{
       degrad_ratio = old_lost;
@@ -871,7 +865,7 @@ void makeIFTTTRequest(void * pvParameters){
       String payload ="";
       
       int i=0;
-      //Serial.print("initscan: ");Serial.println(initscan);
+      
       if(initscan){
           initscan = false;
           while(i!=nbParam) 
@@ -884,11 +878,10 @@ void makeIFTTTRequest(void * pvParameters){
             break;
           headerNames = headerNames + "|||" + column_name[i];
           i++;    
-        }
-        Serial.print("headerNames: ");Serial.println(headerNames);
+        }        
       
           payload = headerNames;
-          //payload = String("{\"value1\":\"") + "SoC" + "|||" + "Power" + "|||" + "BattMinT" + "|||" + "Heater" + "|||" + "Net_Ah" + "|||" + "Net_kWh" + "|||" + "AuxBattSoC" + "|||" + "AuxBattV" + "|||" + "Max_Pwr" + "|||" + "Max_Reg" + "|||" + "BmsSoC" + "|||" + "MAXcellv" + "|||" + "MINcellv" + "|||" + "BATTv" + "|||" + "BATTc" + "|||" + "Speed" + "|||" + "Odometer" + "|||" + "CEC" + "|||" + "CED" + "|||" + "CDC" + "|||" + "CCC";
+          
         }
         
       else{
@@ -906,8 +899,7 @@ void makeIFTTTRequest(void * pvParameters){
           payload = payload + "|||" + sensor_Values[i];
           i++;    
         }
-      }
-      Serial.print("payload: ");Serial.println(payload);
+      }      
       
       String jsonObject = payload + "\"}";                          
                        
@@ -929,22 +921,20 @@ void makeIFTTTRequest(void * pvParameters){
       while(client.available()){
         Serial.write(client.read());
       }
-      send_data = false;
-      if(kWh_update){
-        Prev_kWh = Net_kWh;
-        update_lock ++;              
-          if(update_lock = 2){
-            kWh_update = false;
-            update_lock = 0;
-          }
-      }      
-      if(corr_update){
-        corr_update = false;
-      }          
       
       Serial.println();
       Serial.println("closing connection");
       client.stop();
+
+      send_data = false;
+      
+      if(kWh_update){ //add condition so "kWh_corr" is not trigger before a cycle after a "kWh_update"
+        Prev_kWh = Net_kWh;        
+        kWh_update = false;  // reset kWh_update after it has been recorded and so the correction logic start again       
+      }            
+      if(corr_update){  
+        corr_update = false;  // reset corr_update after it has been recorded
+      }
     }    
     vTaskDelay(10);
   }
@@ -1376,15 +1366,11 @@ void loop() {
 
   currentTimer = millis();  
   if (currentTimer - previousTimer >= sendInterval) {    
-    if (send_enabled){
       send_data = true; // This will trigger logic to send data to Google sheet
-      previousTimer = currentTimer;
-    }
-  /*
-    else if (!send_enabled){
+      previousTimer = currentTimer;     
+    if (!send_enabled){
       sendIntervalOn = true;      
-      previousTimer = currentTimer;
-    }*/
+    }
   } 
                
   /*/////// Read each OBDII PIDs /////////////////*/
