@@ -60,9 +60,9 @@ Button bouton2(BUTTON_2_PIN);
 #define BATTv_HIGH_Warning 410      // Main Battery High Voltage warning (Volts)
 #define AUXBATTv_LOW_Warning 11.8   // Main Battery Low Voltage warning (Volts)
 #define AUXBATTv_HIGH_Warning 14.5  // Main Battery High Voltage warning (Volts)
-#define pagenumbers 7               // number of pages to display
+#define pagenumbers 8               // number of pages to display
 
-int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
+int ledBacklight = 100; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
 
 /*////// Setting PWM properties, do not change this! /////////*/
 const int pwmFreq = 5000;
@@ -137,7 +137,7 @@ float UsedSoC = 0;
 float Net_Ah = 0;
 float DischAh = 0;
 float RegenAh = 0;
-int TripOdo;
+float TripOdo;
 int InitOdo = 0;
 float PrevOPtimemins;
 float TripOPtime;
@@ -178,6 +178,20 @@ bool InitRst = false;
 bool kWh_update = false;
 bool corr_update = false;
 int update_lock = 0;
+bool DrawBackground = false;
+char title[] = "Trip Data";        
+char value1[5];
+char value2[5];
+char value3[5];        
+char value4[5];
+char prev_value1[5];
+char prev_value2[5];
+char prev_value3[5];        
+char prev_value4[5];        
+char unit1[5];
+char unit2[5];
+char unit3[5];
+char unit4[5];
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
@@ -635,10 +649,10 @@ void read_data(){
         Serial.print("1st Reset");
         reset_trip();
         kWh_corr = 0;
-        used_kwh = calc_kwh(SoC, InitSoC);
-        left_kwh = calc_kwh(0, SoC);
         PrevSoC = SoC;
         Prev_kWh = Net_kWh;
+        used_kwh = calc_kwh(SoC, InitSoC);
+        left_kwh = calc_kwh(0, SoC);        
         initscan = true;
         InitRst = false;
       }
@@ -754,7 +768,7 @@ float RangeCalc(){
     TripkWh_100km = Net_kWh * 100 / TripOdo;
   }
   else if (CurrTripOdo > 2 && !ResetOn){
-    kWh_100km = (0.3 * (Net_kWh * 100 / TripOdo)) + (0.7 * old_kWh_100km);    
+    kWh_100km = (0.7 * (Net_kWh * 100 / TripOdo)) + (0.3 * old_kWh_100km);    
   }
   else{
     kWh_100km = old_kWh_100km;
@@ -962,7 +976,8 @@ void ButtonLoop() {
         }
         else{
           Serial.println("Button short press");
-          Serial.print("screenNbr");Serial.print(screenNbr);
+          Serial.print("screenNbr");Serial.print(screenNbr);          
+          DrawBackground = true;
           if(screenNbr == (pagenumbers - 1)){
                 screenNbr = 0;
           }
@@ -1040,7 +1055,8 @@ void reset_trip() { //Overall trip reset. Automatic if the car has been recharge
     EEPROM.writeFloat(28, InitCCC);    //save initial Calculated CED to Flash memory
     EEPROM.writeFloat(32, degrad_ratio);    //save actual batt energy lost in Flash memory
     EEPROM.writeFloat(36, kWh_100km);    //save actual kWh/100 in Flash memory
-    EEPROM.writeFloat(44, PrevOPtimemins);    //save initial time to Flash memory       
+    EEPROM.writeFloat(44, PrevOPtimemins);    //save initial time to Flash memory
+    EEPROM.writeFloat(48, kWh_corr);    //save cummulative kWh correction (between 2 SoC values) to Flash memory       
     EEPROM.commit();
     Serial.println("Values saved to EEPROM");
     CurrInitCED = CED;
@@ -1205,6 +1221,9 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
     switch (pagePosition){
 
       case 1:
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextSize(2);
             tft.setTextColor(TFT_WHITE,TFT_BLUE);
             tft.setTextPadding(135);
             //tft.drawRect(0, 0, 135, 59, TFT_BLUE); // Blue rectangle
@@ -1214,11 +1233,15 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
             //else  draw_normalbox_lvl1();
             draw_normalbox_lvl1();
             //tft.setTextPadding( tft.textWidth("888.8", 2) );
+            tft.setTextSize(3);
             tft.setTextPadding(130);
             tft.drawFloat(PID, decimal, tft.width()/2, drawLvl1, 2);                 
             break;
 
       case 2:
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextSize(2);
             tft.setTextColor(TFT_WHITE,TFT_BLUE);
             tft.setTextPadding(135);
             //tft.drawRect(0, 60, 135, 119, TFT_BLUE); // Blue rectangle
@@ -1228,11 +1251,15 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
             //else  draw_normalbox_lvl2();
             draw_normalbox_lvl2();
             //tft.setTextPadding( tft.textWidth("888.8", 2) );
+            tft.setTextSize(3);
             tft.setTextPadding(130);
             tft.drawFloat(PID, decimal, tft.width()/2, drawLvl2, 2);                 
             break;
 
       case 3:
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextSize(2);
             tft.setTextColor(TFT_WHITE,TFT_BLUE);
             tft.setTextPadding(135);
             //tft.drawRect(0, 120, 135, 179, TFT_BLUE); // Blue rectangle
@@ -1242,11 +1269,15 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
             //else  draw_normalbox_lvl3();
             draw_normalbox_lvl3();
             //tft.setTextPadding( tft.textWidth("888.8", 2) );
+            tft.setTextSize(3);
             tft.setTextPadding(130);
             tft.drawFloat(PID, decimal, tft.width()/2, drawLvl3, 2);                 
             break;
 
       case 4:
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextSize(2);
             tft.setTextColor(TFT_WHITE,TFT_BLUE);
             tft.setTextPadding(135);
             //tft.drawRect(0, 180, 135, 235, TFT_BLUE); // Blue rectangle
@@ -1256,6 +1287,7 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
             //else  draw_normalbox_lvl4();
             draw_normalbox_lvl4();
             //tft.setTextPadding( tft.textWidth("888.8", 2) );
+            tft.setTextSize(3);
             tft.setTextPadding(130);
             tft.drawFloat(PID, decimal, tft.width()/2, drawLvl4, 2);                 
             break;
@@ -1267,12 +1299,13 @@ void DisplayFloatPID(int pagePosition, char *text, float PID, int decimal, int L
 //-------------------------------------------------------------------------------------
 
 /*///////////////// Display Page 1 //////////////////////*/
-void page1(){    
-                      
+void page1(){ 
+        
         DisplayFloatPID(1, "TripOdo", TripOdo, 0, 0, 0, 0, 0);
         DisplayFloatPID(2, "UsedSoC", UsedSoC, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "EstLeft_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);         
+        DisplayFloatPID(4, "EstLeft_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);
+        DrawBackground = false;         
 }
 /*///////////////// End of Display Page 1 //////////////////////*/
 
@@ -1283,6 +1316,7 @@ void page2(){
         DisplayFloatPID(2, "Est_range", Est_range, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "Full_Ah", EstFull_Ah, 1, 0, 0, 0, 0);
+        DrawBackground = false;
 }
 /*///////////////// End of Display Page 2 //////////////////////*/
 
@@ -1292,7 +1326,8 @@ void page3(){
         DisplayFloatPID(1, "Calc_Used", used_kwh, 1, 0, 0, 0, 0);
         DisplayFloatPID(2, "Calc_Left", left_kwh, 1, 0, 0, 0, 0);        
         DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "Full_kWh", EstFull_kWh, 1, 0, 0, 0, 0);                     
+        DisplayFloatPID(4, "Full_kWh", EstFull_kWh, 1, 0, 0, 0, 0);
+        DrawBackground = false;                     
 }
 /*///////////////// End of Display Page 3 //////////////////////*/
 
@@ -1303,6 +1338,7 @@ void page4(){
         DisplayFloatPID(2, "Heater", Heater, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "Power", Power, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);
+        DrawBackground = false;
 }
 /*///////////////// End of Display Page 4 //////////////////////*/
 
@@ -1313,7 +1349,7 @@ void page5(){
         DisplayFloatPID(2, "Power", Power, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "BattMinT", BattMinT, 1, 0, 0, 0, 0);
         DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);       
-       
+        DrawBackground = false;
 }
 /*///////////////// End of Display Page 5 //////////////////////*/
 
@@ -1323,7 +1359,8 @@ void page6(){
         DisplayFloatPID(1, "Trip_kWh", CurrNet_kWh, 1, 0, 0, 0, 0);
         DisplayFloatPID(2, "TripOdo", CurrTripOdo, 1, 0, 0, 0, 0);
         DisplayFloatPID(3, "TripSoC", CurrUsedSoC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "AuxBattSoC", AuxBattSoC, 1, 0, 0, 0, 0);     
+        DisplayFloatPID(4, "AuxBattSoC", AuxBattSoC, 1, 0, 0, 0, 0);
+        DrawBackground = false;     
 }
 /*///////////////// End of Display Page 6 //////////////////////*/
 
@@ -1334,16 +1371,76 @@ void page7(){
         DisplayFloatPID(2, "MAXcellv", MAXcellv, 2, 0, 0, 0, 0);
         DisplayFloatPID(3, "CellVdiff", CellVdiff, 2, 0, 0, 0, 0);
         DisplayFloatPID(4, "SOH", SOH, 1, 0, 0, 0, 0);
+        DrawBackground = false;
 }
 /*///////////////// End of Display Page 7 //////////////////////*/
 
 /*///////////////// Display Page 8 //////////////////////*/
-void page8(){
+void page8(){       
         
-        DisplayFloatPID(1, "InitCED", InitCED, 1, 0, 0, 0, 0);        
-        DisplayFloatPID(2, "InitCEC", InitCEC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "CED", CED, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "CEC", CEC, 1, 0, 0, 0, 0);
+        strcpy(title,"Trip Data");
+        dtostrf(TripOdo,3,0,value1);
+        dtostrf(UsedSoC,3,1,value2);
+        dtostrf(Net_kWh,3,1,value3);
+        dtostrf(EstLeft_kWh,3,1,value4);
+        strcpy(unit1,"Km");
+        strcpy(unit2,"%");
+        strcpy(unit3,"kWh");
+        strcpy(unit4,"kWh");        
+
+        //tft.fillScreen(TFT_BLACK);
+        if(DrawBackground){
+          tft.fillScreen(TFT_BLACK);
+          tft.setTextDatum(MC_DATUM);
+          tft.setTextSize(2);
+          tft.setTextColor(TFT_WHITE,TFT_BLUE);
+          //tft.setTextPadding(135);            
+          tft.drawString(title, tft.width() / 2, 10);
+          tft.setTextDatum(TR_DATUM);
+          tft.setTextSize(3);
+          tft.setTextColor(TFT_GREEN,TFT_BLACK);        
+          tft.drawString(unit1, 134, 20);
+          tft.drawString(unit2, 134, 55);
+          tft.drawString(unit3, 134, 130);
+          tft.drawString(unit4, 134, 185);
+          strcpy(prev_value1,"");
+          strcpy(prev_value2,"");
+          strcpy(prev_value3,"");
+          strcpy(prev_value4,"");
+          DrawBackground = false;
+        }
+        tft.setTextDatum(CL_DATUM);
+        tft.setTextSize(4); 
+        
+        if(value1 != prev_value1){
+          tft.setTextColor(TFT_BLACK,TFT_BLACK);        
+          tft.drawString(prev_value1, 0, 57);
+          tft.setTextColor(TFT_GREEN,TFT_BLACK);        
+          tft.drawString(value1, 0, 57);
+          strcpy(prev_value1,value1);
+        }
+        if(value2 != prev_value2){
+          tft.setTextColor(TFT_BLACK,TFT_BLACK);
+          tft.drawString(prev_value2, 0, 112);
+          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.drawString(value2, 0, 112);
+          strcpy(prev_value2,value2);
+        }
+        if(value3 != prev_value3){
+          tft.setTextColor(TFT_BLACK,TFT_BLACK);
+          tft.drawString(prev_value3, 0, 167);
+          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.drawString(value3, 0, 167);
+          strcpy(prev_value3,value3);
+        }
+        if(value4 != prev_value4){
+          tft.setTextColor(TFT_BLACK,TFT_BLACK);
+          tft.drawString(prev_value4, 0, 222);
+          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.drawString(value4, 0, 222);
+          strcpy(prev_value4,value4);
+        }                    
+        
 }
 /*///////////////// End of Display Page 8 //////////////////////*/
 
