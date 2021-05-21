@@ -178,7 +178,7 @@ bool InitRst = false;
 bool kWh_update = false;
 bool corr_update = false;
 int update_lock = 0;
-bool DrawBackground = false;
+bool DrawBackground = true;
 char title1[12];
 char title2[12];
 char title3[12];
@@ -750,7 +750,7 @@ float UpdateNetEnergy(){
                      
         Discharg = CED - InitCED;
         Regen = CEC - InitCEC;
-        Net_kWh = Discharg - Regen;        
+        Net_kWh = Discharg - (0.985 * Regen);  //applied 0.985 factor for battery recharge cycle lost      
         
         DischAh = CDC - InitCDC;        
         RegenAh = CCC - InitCCC;
@@ -799,9 +799,10 @@ float calc_kwh(float min_SoC, float max_SoC){
   integral = 0,0;
   double x = 0;
   for (int i = 0; i < N; ++i){
-    x = min_SoC + interval * i;    
-    //integral += ((0.00159 * x) + 0.562);  //64kWh battery energy equation
-    integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
+    x = min_SoC + interval * i;
+    integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
+    //integral += ((0.001733 * x) + 0.555);  //64kWh battery energy equation
+    //integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
   }
   return_kwh = integral * interval;
   return return_kwh;
@@ -1078,7 +1079,8 @@ void reset_trip() { //Overall trip reset. Automatic if the car has been recharge
 
 void ResetCurrTrip(){ // when the car is turned On, current trip values are resetted.
   
-    if (BMS_ign && ResetOn && (SoC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){ // ResetOn condition might be enough, might need to update code...        
+    if (
+      ResetOn && (SoC > 1) && (Odometer > 1) && (CED > 1) && (CEC > 1)){ // ResetOn condition might be enough, might need to update code...        
         CurrInitCED = CED;
         CurrInitCEC = CEC;
         CurrInitOdo = Odometer;
@@ -1241,10 +1243,10 @@ void DisplayPage(){
           strcpy(prev_value2,"");
           strcpy(prev_value3,"");
           strcpy(prev_value4,"");
-          DrawBackground = false;        }
-        
-        tft.setTextSize(3);
-        tft.setTextFont(2); 
+          DrawBackground = false;
+          tft.setTextSize(3);
+          tft.setTextFont(2);
+        }         
         
         if(value1 != prev_value1){
           tft.setTextColor(TFT_BLACK,TFT_BLACK);        
@@ -1336,7 +1338,7 @@ void page3(){
         dtostrf(used_kwh,3,1,value1);
         dtostrf(left_kwh,3,1,value2);
         dtostrf(Net_kWh,3,1,value3);
-        dtostrf(EstLeft_kWh,3,1,value4);
+        dtostrf(EstFull_kWh,3,1,value4);
 
         DisplayPage();
         /*  
