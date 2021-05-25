@@ -750,7 +750,7 @@ float UpdateNetEnergy(){
                      
         Discharg = CED - InitCED;
         Regen = CEC - InitCEC;
-        Net_kWh = Discharg - (0.985 * Regen);  //applied 0.985 factor for battery recharge cycle lost      
+        Net_kWh = Discharg - Regen;     
         
         DischAh = CDC - InitCDC;        
         RegenAh = CCC - InitCCC;
@@ -1250,28 +1250,28 @@ void DisplayPage(){
         if(value1 != prev_value1){
           tft.setTextColor(TFT_BLACK,TFT_BLACK);        
           tft.drawString(prev_value1, tft.width()/2, drawLvl1);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);        
+          tft.setTextColor(TFT_GREEN,TFT_GREEN);        
           tft.drawString(value1, tft.width()/2, drawLvl1);
           strcpy(prev_value1,value1);
         }
         if(value2 != prev_value2){
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
           tft.drawString(prev_value2, tft.width()/2, drawLvl2);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value2, tft.width()/2, drawLvl2);
           strcpy(prev_value2,value2);
         }
         if(value3 != prev_value3){
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
           tft.drawString(prev_value3, tft.width()/2, drawLvl3);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value3, tft.width()/2, drawLvl3);
           strcpy(prev_value3,value3);
         }
         if(value4 != prev_value4){
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
           tft.drawString(prev_value4, tft.width()/2, drawLvl4);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
+          tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value4, tft.width()/2, drawLvl4);
           strcpy(prev_value4,value4);
         }                    
