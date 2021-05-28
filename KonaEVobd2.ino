@@ -42,9 +42,9 @@ TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom display library
 #define textLvl2 68
 #define textLvl3 129
 #define textLvl4 189
-#define drawLvl1 37            // and numbers
-#define drawLvl2 98
-#define drawLvl3 158
+#define drawLvl1 38            // and numbers
+#define drawLvl2 99
+#define drawLvl3 159
 #define drawLvl4 219            // TTGO 135x240 TFT display
 
 #define BUTTON_PIN  0
@@ -1180,23 +1180,23 @@ void draw_warningbox_lvl4(){
 }
 
 void draw_normalbox_lvl1(){
-                         tft.setTextColor(TFT_GREEN,TFT_BLACK); 
-                         tft.fillRect(1, 18, 134, 58, TFT_BLACK);
+                         //tft.setTextColor(TFT_GREEN,TFT_BLACK); 
+                         tft.fillRect(1, 19, 133, 59, TFT_BLACK);
 }
 
 void draw_normalbox_lvl2(){
-                         tft.setTextColor(TFT_GREEN,TFT_BLACK); 
-                         tft.fillRect(1, 78, 134, 118, TFT_BLACK);
+                         //tft.setTextColor(TFT_GREEN,TFT_BLACK); 
+                         tft.fillRect(1, 79, 133, 119, TFT_BLACK);
 }
 
 void draw_normalbox_lvl3(){
-                         tft.setTextColor(TFT_GREEN,TFT_BLACK); 
-                         tft.fillRect(1, 138, 134, 178, TFT_BLACK);
+                         //tft.setTextColor(TFT_GREEN,TFT_BLACK); 
+                         tft.fillRect(1, 139, 133, 179, TFT_BLACK);
 }
 
 void draw_normalbox_lvl4(){
-                         tft.setTextColor(TFT_GREEN,TFT_BLACK); 
-                         tft.fillRect(1, 198, 134, 234, TFT_BLACK);
+                         //tft.setTextColor(TFT_GREEN,TFT_BLACK); 
+                         tft.fillRect(1, 199, 133, 239, TFT_BLACK);
 }
 
 void draw_greenbox_lvl1(){
@@ -1247,30 +1247,30 @@ void DisplayPage(){
           tft.setTextFont(2);
         }         
         
-        if(value1 != prev_value1){
+        if(value1 != prev_value1){            
           tft.setTextColor(TFT_BLACK,TFT_BLACK);        
-          tft.drawString(prev_value1, tft.width()/2, drawLvl1);
+          tft.drawString(prev_value1, tft.width()/2, drawLvl1);         
           tft.setTextColor(TFT_GREEN,TFT_GREEN);        
           tft.drawString(value1, tft.width()/2, drawLvl1);
           strcpy(prev_value1,value1);
         }
-        if(value2 != prev_value2){
+        if(value2 != prev_value2){         
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value2, tft.width()/2, drawLvl2);
+          tft.drawString(prev_value2, tft.width()/2, drawLvl2);          
           tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value2, tft.width()/2, drawLvl2);
           strcpy(prev_value2,value2);
         }
-        if(value3 != prev_value3){
+        if(value3 != prev_value3){          
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value3, tft.width()/2, drawLvl3);
+          tft.drawString(prev_value3, tft.width()/2, drawLvl3);          
           tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value3, tft.width()/2, drawLvl3);
           strcpy(prev_value3,value3);
         }
-        if(value4 != prev_value4){
+        if(value4 != prev_value4){          
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value4, tft.width()/2, drawLvl4);
+          tft.drawString(prev_value4, tft.width()/2, drawLvl4);         
           tft.setTextColor(TFT_GREEN,TFT_GREEN);
           tft.drawString(value4, tft.width()/2, drawLvl4);
           strcpy(prev_value4,value4);
@@ -1293,14 +1293,7 @@ void page1(){
         dtostrf(Net_kWh,3,1,value3);
         dtostrf(EstLeft_kWh,3,1,value4);
 
-        DisplayPage();
-        /*
-        DisplayFloatPID(1, "TripOdo", TripOdo, 0, 0, 0, 0, 0);
-        DisplayFloatPID(2, "UsedSoC", UsedSoC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "EstLeft_kWh", EstLeft_kWh, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */         
+        DisplayPage();               
 }
 /*///////////////// End of Display Page 1 //////////////////////*/
 
@@ -1316,14 +1309,7 @@ void page2(){
         dtostrf(CurrOPtime,3,1,value3);
         dtostrf(EstFull_Ah,3,0,value4);
 
-        DisplayPage();
-        /*  
-        DisplayFloatPID(1, "kWh/100km", kWh_100km, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "Est_range", Est_range, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "CurrOPtime", CurrOPtime, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "Full_Ah", EstFull_Ah, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */
+        DisplayPage();       
 }
 /*///////////////// End of Display Page 2 //////////////////////*/
 
@@ -1339,14 +1325,7 @@ void page3(){
         dtostrf(Net_kWh,3,1,value3);
         dtostrf(EstFull_kWh,3,1,value4);
 
-        DisplayPage();
-        /*  
-        DisplayFloatPID(1, "Calc_Used", used_kwh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "Calc_Left", left_kwh, 1, 0, 0, 0, 0);        
-        DisplayFloatPID(3, "Net_kWh", Net_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "Full_kWh", EstFull_kWh, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */                     
+        DisplayPage();                            
 }
 /*///////////////// End of Display Page 3 //////////////////////*/
 
@@ -1362,14 +1341,7 @@ void page4(){
         dtostrf(Power,3,1,value3);
         dtostrf(SoC,3,1,value4);
 
-        DisplayPage();
-        /*
-        DisplayFloatPID(1, "BattMinT", BattMinT, 1, 0, 0, 0, 00);
-        DisplayFloatPID(2, "Heater", Heater, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "Power", Power, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */
+        DisplayPage();        
 }
 /*///////////////// End of Display Page 4 //////////////////////*/
 
@@ -1385,14 +1357,7 @@ void page5(){
         dtostrf(BattMinT,3,1,value3);
         dtostrf(SoC,3,1,value4);
 
-        DisplayPage();
-        /*
-        DisplayFloatPID(1, "Max_Pwr", Max_Pwr, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "Power", Power, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "BattMinT", BattMinT, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "SoC", SoC, 1, 0, 0, 0, 0);       
-        DrawBackground = false;
-        */
+        DisplayPage();        
 }
 /*///////////////// End of Display Page 5 //////////////////////*/
 
@@ -1408,14 +1373,7 @@ void page6(){
         dtostrf(CurrUsedSoC,3,1,value3);
         dtostrf(AuxBattSoC,3,1,value4);
 
-        DisplayPage();
-        /*
-        DisplayFloatPID(1, "Trip_kWh", CurrNet_kWh, 1, 0, 0, 0, 0);
-        DisplayFloatPID(2, "TripOdo", CurrTripOdo, 1, 0, 0, 0, 0);
-        DisplayFloatPID(3, "TripSoC", CurrUsedSoC, 1, 0, 0, 0, 0);
-        DisplayFloatPID(4, "AuxBattSoC", AuxBattSoC, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */     
+        DisplayPage();            
 }
 /*///////////////// End of Display Page 6 //////////////////////*/
 
@@ -1431,85 +1389,10 @@ void page7(){
         dtostrf(CellVdiff,3,2,value3);
         dtostrf(SOH,3,0,value4);
 
-        DisplayPage();
-        /*
-        DisplayFloatPID(1, "BmsSoC", BmsSoC, 1, 0, 0, 0, 0);        
-        DisplayFloatPID(2, "MAXcellv", MAXcellv, 2, 0, 0, 0, 0);
-        DisplayFloatPID(3, "CellVdiff", CellVdiff, 2, 0, 0, 0, 0);
-        DisplayFloatPID(4, "SOH", SOH, 1, 0, 0, 0, 0);
-        DrawBackground = false;
-        */
+        DisplayPage();        
 }
-/*///////////////// End of Display Page 7 //////////////////////*/
-
-/*///////////////// Display Page 8 //////////////////////*/
-void page8(){       
+/*///////////////// End of Display Page 7 //////////////////////*/                 
         
-        strcpy(title1,"Trip Data");
-        dtostrf(TripOdo,3,0,value1);
-        dtostrf(UsedSoC,3,1,value2);
-        dtostrf(Net_kWh,3,1,value3);
-        dtostrf(EstLeft_kWh,3,1,value4);
-        strcpy(unit1,"Km");
-        strcpy(unit2,"%");
-        strcpy(unit3,"kWh");
-        strcpy(unit4,"kWh");        
-
-        //tft.fillScreen(TFT_BLACK);
-        if(DrawBackground){
-          tft.fillScreen(TFT_BLACK);
-          tft.setTextDatum(MC_DATUM);
-          tft.setTextSize(2);
-          tft.setTextColor(TFT_WHITE,TFT_BLUE);
-          //tft.setTextPadding(135);            
-          tft.drawString(title1, tft.width() / 2, 10);
-          tft.setTextDatum(TR_DATUM);
-          tft.setTextSize(3);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);        
-          tft.drawString(unit1, 134, 20);
-          tft.drawString(unit2, 134, 55);
-          tft.drawString(unit3, 134, 130);
-          tft.drawString(unit4, 134, 185);
-          strcpy(prev_value1,"");
-          strcpy(prev_value2,"");
-          strcpy(prev_value3,"");
-          strcpy(prev_value4,"");
-          DrawBackground = false;
-        }
-        tft.setTextDatum(CL_DATUM);
-        tft.setTextSize(4); 
-        
-        if(value1 != prev_value1){
-          tft.setTextColor(TFT_BLACK,TFT_BLACK);        
-          tft.drawString(prev_value1, 0, 57);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);        
-          tft.drawString(value1, 0, 57);
-          strcpy(prev_value1,value1);
-        }
-        if(value2 != prev_value2){
-          tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value2, 0, 112);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
-          tft.drawString(value2, 0, 112);
-          strcpy(prev_value2,value2);
-        }
-        if(value3 != prev_value3){
-          tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value3, 0, 167);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
-          tft.drawString(value3, 0, 167);
-          strcpy(prev_value3,value3);
-        }
-        if(value4 != prev_value4){
-          tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value4, 0, 222);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);
-          tft.drawString(value4, 0, 222);
-          strcpy(prev_value4,value4);
-        }                    
-        
-}
-/*///////////////// End of Display Page 8 //////////////////////*/
 
 
 /*///////////////////////////////////////////////////////////////////////*/
@@ -1543,8 +1426,7 @@ void loop() {
                case 3: page4(); break;
                case 4: page5(); break;
                case 5: page6(); break;
-               case 6: page7(); break;
-               case 7: page8(); break;                                                                         
+               case 6: page7(); break;                                                                                        
                }
       }
   
