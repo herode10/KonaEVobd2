@@ -800,7 +800,8 @@ float calc_kwh(float min_SoC, float max_SoC){
   double x = 0;
   for (int i = 0; i < N; ++i){
     x = min_SoC + interval * i;
-    integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
+    integral += ((0.0014 * x) + 0.5715);  //64kWh battery energy equation
+    //integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
     //integral += ((0.001733 * x) + 0.555);  //64kWh battery energy equation
     //integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
   }
