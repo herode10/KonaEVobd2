@@ -57,7 +57,7 @@ Button bouton2(BUTTON_2_PIN);
 #define AUXBATTv_HIGH_Warning 14.5  // Main Battery High Voltage warning (Volts)
 #define pagenumbers 7               // number of pages to display
 
-int ledBacklight = 80; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
+int ledBacklight = 100; // Initial TFT backlight intensity on a scale of 0 to 255. Initial value is 80.
 
 const char* ssid = "********";             //replace network name here
 const char* password = "***********";      //replace network password
