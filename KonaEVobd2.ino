@@ -718,7 +718,7 @@ void read_data(){
     else{
       degrad_ratio = old_lost;
     }
-    EstFull_kWh = 64 * degrad_ratio;
+    EstFull_kWh = (356 * 180) / 1000 * degrad_ratio;
     EstLeft_kWh = left_kwh * degrad_ratio;
       
     RangeCalc();
@@ -800,7 +800,7 @@ float calc_kwh(float min_SoC, float max_SoC){
   double x = 0;
   for (int i = 0; i < N; ++i){
     x = min_SoC + interval * i;
-    integral += ((0.0014 * x) + 0.5715);  //64kWh battery energy equation
+    integral += ((0.0014465 * x) + 0.5692);  //64kWh battery energy equation
     //integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
     //integral += ((0.001733 * x) + 0.555);  //64kWh battery energy equation
     //integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
@@ -1318,13 +1318,13 @@ void page2(){
 /*///////////////// Display Page 3 //////////////////////*/
 void page3(){
 
-        strcpy(title1,"Calc_Used");
-        strcpy(title2,"Calc_Left");
-        strcpy(title3,"Net_kWh");
+        strcpy(title1,"Calc_Used");        
+        strcpy(title2,"Net_kWh");
+        strcpy(title3,"Calc_Left");
         strcpy(title4,"Full_kWh");        
-        dtostrf(used_kwh,3,1,value1);
-        dtostrf(left_kwh,3,1,value2);
-        dtostrf(Net_kWh,3,1,value3);
+        dtostrf(used_kwh,3,1,value1);        
+        dtostrf(Net_kWh,3,1,value2);
+        dtostrf(left_kwh,3,1,value3);
         dtostrf(EstFull_kWh,3,1,value4);
 
         DisplayPage();                            
