@@ -712,7 +712,7 @@ void read_data(){
     }    
   }  
         
-    if(used_kwh > 1){
+    if(used_kwh >= 5){
       degrad_ratio = Net_kWh / used_kwh;      
     }
     else{
@@ -750,7 +750,7 @@ float UpdateNetEnergy(){
                      
         Discharg = CED - InitCED;
         Regen = CEC - InitCEC;
-        Net_kWh = Discharg - Regen;     
+        Net_kWh = (Discharg * 0.98) - (Regen * 0.98);     
         
         DischAh = CDC - InitCDC;        
         RegenAh = CCC - InitCCC;
@@ -768,13 +768,13 @@ float UpdateNetEnergy(){
 float RangeCalc(){
   
   MeanSpeed = (CurrTripOdo / CurrOPtime) * 60;
+  TripkWh_100km = Net_kWh * 100 / TripOdo;
     
   if (CurrTripOdo > 10 && !ResetOn){  
-    kWh_100km = CurrNet_kWh * 100 / CurrTripOdo;    
-    TripkWh_100km = Net_kWh * 100 / TripOdo;
+    kWh_100km = CurrNet_kWh * 100 / CurrTripOdo;
   }
   else if (CurrTripOdo > 2 && !ResetOn){
-    kWh_100km = (0.7 * (Net_kWh * 100 / TripOdo)) + (0.3 * old_kWh_100km);    
+    kWh_100km = (0.5 * (Net_kWh * 100 / TripOdo)) + (0.5 * old_kWh_100km);    
   }
   else{
     kWh_100km = old_kWh_100km;
@@ -800,7 +800,7 @@ float calc_kwh(float min_SoC, float max_SoC){
   double x = 0;
   for (int i = 0; i < N; ++i){
     x = min_SoC + interval * i;
-    integral += ((0.0014465 * x) + 0.5692);  //64kWh battery energy equation
+    integral += ((0.001487 * x) + 0.5672);  //64kWh battery energy equation
     //integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
     //integral += ((0.001733 * x) + 0.555);  //64kWh battery energy equation
     //integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
