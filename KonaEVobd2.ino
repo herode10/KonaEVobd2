@@ -663,7 +663,7 @@ void read_data(){
       }
       if(!InitRst){ // kWh calculation when the Initial reset is not active
         // After a Trip Reset, perform a new reset if SoC changed without a Net_kWh increase (in case SoC was just about to change when the reset was performed) or if SoC changed from 100 to 99 (did not go through 99.5)
-        if(((Net_kWh < 0.2) & (PrevSoC > SoC)) | ((SoC > 98.5) & ((PrevSoC - SoC) > 0.5))){ 
+        if(((Net_kWh < 0.3) & (PrevSoC > SoC)) | ((SoC > 98.5) & ((PrevSoC - SoC) > 0.5))){ 
           Serial.print("Net_kWh= ");Serial.println(Net_kWh);
           Serial.print("2nd Reset");
           reset_trip();
@@ -750,7 +750,7 @@ float UpdateNetEnergy(){
                      
         Discharg = CED - InitCED;
         Regen = CEC - InitCEC;
-        Net_kWh = (Discharg * 0.98) - (Regen * 0.98);     
+        Net_kWh = Discharg - Regen;     
         
         DischAh = CDC - InitCDC;        
         RegenAh = CCC - InitCCC;
@@ -800,9 +800,9 @@ float calc_kwh(float min_SoC, float max_SoC){
   double x = 0;
   for (int i = 0; i < N; ++i){
     x = min_SoC + interval * i;
-    integral += ((0.001487 * x) + 0.5672);  //64kWh battery energy equation
+    //integral += ((0.001487 * x) + 0.5672);  //64kWh battery energy equation
     //integral += ((0.0018344 * x) + 0.55);  //64kWh battery energy equation    
-    //integral += ((0.001733 * x) + 0.555);  //64kWh battery energy equation
+    integral += ((0.0014 * x) + 0.5748);  //64kWh battery energy equation
     //integral += ((2E-7 * pow(x,3)) + (-2.4E-5 * pow(x,2)) + (0.002194 * x) + 0.562);  //64kWh battery energy equation
   }
   return_kwh = integral * interval;
