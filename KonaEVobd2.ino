@@ -191,10 +191,19 @@ char prev_value1[5];
 char prev_value2[5];
 char prev_value3[5];        
 char prev_value4[5];        
-char unit1[5];
-char unit2[5];
-char unit3[5];
-char unit4[5];
+bool negative_flag1;
+bool negative_flag2;
+bool negative_flag3;
+bool negative_flag4;
+float value1_float;
+float value2_float;
+float value3_float;
+float value4_float;
+int nbr_decimal1;
+int nbr_decimal2;
+int nbr_decimal3;
+int nbr_decimal4;
+
 
 /*////// Variables for Google Sheet data transfer ////////////*/
 bool send_enabled = false;
@@ -1236,45 +1245,101 @@ void DisplayPage(){
           tft.drawString(title1, tft.width() / 2, textLvl1);
           tft.drawString(title2, tft.width() / 2, textLvl2);
           tft.drawString(title3, tft.width() / 2, textLvl3);
-          tft.drawString(title4, tft.width() / 2, textLvl4);
-          
-          tft.setTextSize(4);
-          tft.setTextColor(TFT_GREEN,TFT_BLACK);          
+          tft.drawString(title4, tft.width() / 2, textLvl4);          
+                 
           strcpy(prev_value1,"");
           strcpy(prev_value2,"");
           strcpy(prev_value3,"");
           strcpy(prev_value4,"");
           DrawBackground = false;
-          tft.setTextSize(3);
           tft.setTextFont(2);
+          tft.setTextSize(3);          
         }         
+
+        if(value1_float < 0){ 
+          value1_float = abs(value1_float);
+          negative_flag1 = true;
+        }
+        else{
+          negative_flag1 = false;
+        }
+        if(value2_float < 0){ 
+          value2_float = abs(value2_float);
+          negative_flag2 = true;
+        }
+        else{
+          negative_flag2 = false;
+        }
+        if(value3_float < 0){ 
+          value3_float = abs(value3_float);
+          negative_flag3 = true;
+        }
+        else{
+          negative_flag3 = false;
+        }
+        if(value4_float < 0){ 
+          value4_float = abs(value4_float);
+          negative_flag4 = true;
+        }
+        else{
+          negative_flag4 = false;
+        }
+        
+        dtostrf(value1_float,3,nbr_decimal1,value1);
+        dtostrf(value2_float,3,nbr_decimal2,value2);
+        dtostrf(value3_float,3,nbr_decimal3,value3);
+        dtostrf(value4_float,3,nbr_decimal4,value4);
         
         if(value1 != prev_value1){            
           tft.setTextColor(TFT_BLACK,TFT_BLACK);        
-          tft.drawString(prev_value1, tft.width()/2, drawLvl1);         
-          tft.setTextColor(TFT_GREEN,TFT_GREEN);        
-          tft.drawString(value1, tft.width()/2, drawLvl1);
+          tft.drawString(prev_value1, tft.width()/2, drawLvl1);
+          if(negative_flag1){        
+            tft.setTextColor(TFT_ORANGE,TFT_BLACK);        
+            tft.drawString(value1, tft.width()/2, drawLvl1);
+          }
+          else{            
+            tft.setTextColor(TFT_GREEN,TFT_BLACK);        
+            tft.drawString(value1, tft.width()/2, drawLvl1);
+          }
           strcpy(prev_value1,value1);
         }
         if(value2 != prev_value2){         
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value2, tft.width()/2, drawLvl2);          
-          tft.setTextColor(TFT_GREEN,TFT_GREEN);
-          tft.drawString(value2, tft.width()/2, drawLvl2);
+          tft.drawString(prev_value2, tft.width()/2, drawLvl2);     
+          if(negative_flag2){     
+            tft.setTextColor(TFT_ORANGE,TFT_BLACK);        
+            tft.drawString(value2, tft.width()/2, drawLvl2);
+          }
+          else{
+            tft.setTextColor(TFT_GREEN,TFT_BLACK);
+            tft.drawString(value2, tft.width()/2, drawLvl2);            
+          }
           strcpy(prev_value2,value2);
         }
         if(value3 != prev_value3){          
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value3, tft.width()/2, drawLvl3);          
-          tft.setTextColor(TFT_GREEN,TFT_GREEN);
-          tft.drawString(value3, tft.width()/2, drawLvl3);
+          tft.drawString(prev_value3, tft.width()/2, drawLvl3);
+          if(negative_flag3){          
+            tft.setTextColor(TFT_ORANGE,TFT_BLACK);        
+            tft.drawString(value3, tft.width()/2, drawLvl3);
+          }
+          else{
+            tft.setTextColor(TFT_GREEN,TFT_BLACK);
+            tft.drawString(value3, tft.width()/2, drawLvl3);            
+          }
           strcpy(prev_value3,value3);
         }
         if(value4 != prev_value4){          
           tft.setTextColor(TFT_BLACK,TFT_BLACK);
-          tft.drawString(prev_value4, tft.width()/2, drawLvl4);         
-          tft.setTextColor(TFT_GREEN,TFT_GREEN);
-          tft.drawString(value4, tft.width()/2, drawLvl4);
+          tft.drawString(prev_value4, tft.width()/2, drawLvl4);
+          if(negative_flag4){          
+            tft.setTextColor(TFT_ORANGE,TFT_BLACK);        
+            tft.drawString(value4, tft.width()/2, drawLvl4);
+          }         
+          else{
+            tft.setTextColor(TFT_GREEN,TFT_BLACK);
+            tft.drawString(value4, tft.width()/2, drawLvl4);            
+          }
           strcpy(prev_value4,value4);
         }                    
         
@@ -1290,10 +1355,14 @@ void page1(){
         strcpy(title2,"UsedSoC");
         strcpy(title3,"Net_kWh");
         strcpy(title4,"EstLeft_kWh");
-        dtostrf(TripOdo,3,0,value1);
-        dtostrf(UsedSoC,3,1,value2);
-        dtostrf(Net_kWh,3,1,value3);
-        dtostrf(EstLeft_kWh,3,1,value4);
+        value1_float = TripOdo;
+        value2_float = UsedSoC;
+        value3_float = Net_kWh;
+        value4_float = EstLeft_kWh;
+        nbr_decimal1 = 0;
+        nbr_decimal2 = 1;
+        nbr_decimal3 = 1;
+        nbr_decimal4 = 1;        
 
         DisplayPage();               
 }
@@ -1305,11 +1374,15 @@ void page2(){
         strcpy(title1,"kWh/100km");
         strcpy(title2,"Est_range");
         strcpy(title3,"CurrOPtime");
-        strcpy(title4,"Full_Ah");
-        dtostrf(kWh_100km,3,1,value1);
-        dtostrf(Est_range,3,0,value2);
-        dtostrf(CurrOPtime,3,1,value3);
-        dtostrf(EstFull_Ah,3,0,value4);
+        strcpy(title4,"Full_Ah");        
+        value1_float = kWh_100km;
+        value2_float = Est_range;
+        value3_float = CurrOPtime;
+        value4_float = EstFull_Ah;
+        nbr_decimal1 = 1;
+        nbr_decimal2 = 0;
+        nbr_decimal3 = 1;
+        nbr_decimal4 = 0;
 
         DisplayPage();       
 }
@@ -1321,11 +1394,15 @@ void page3(){
         strcpy(title1,"Calc_Used");        
         strcpy(title2,"Net_kWh");
         strcpy(title3,"Calc_Left");
-        strcpy(title4,"Full_kWh");        
-        dtostrf(used_kwh,3,1,value1);        
-        dtostrf(Net_kWh,3,1,value2);
-        dtostrf(left_kwh,3,1,value3);
-        dtostrf(EstFull_kWh,3,1,value4);
+        strcpy(title4,"Full_kWh");  
+        value1_float = used_kwh;
+        value2_float = Net_kWh;
+        value3_float = left_kwh;
+        value4_float = EstFull_kWh;
+        nbr_decimal1 = 1;
+        nbr_decimal2 = 1;
+        nbr_decimal3 = 1;
+        nbr_decimal4 = 1;
 
         DisplayPage();                            
 }
@@ -1337,11 +1414,25 @@ void page4(){
         strcpy(title1,"BattMinT");
         strcpy(title2,"Heater");
         strcpy(title3,"Power");
-        strcpy(title4,"SoC");
-        dtostrf(BattMinT,3,1,value1);
-        dtostrf(Heater,3,1,value2);
-        dtostrf(Power,3,1,value3);
-        dtostrf(SoC,3,1,value4);
+        strcpy(title4,"BattMaxT");        
+        value1_float = BattMinT;
+        value2_float = Heater;
+        value3_float = Power;
+        value4_float = BattMaxT;
+        nbr_decimal1 = 1;
+        nbr_decimal2 = 1;
+        if(value3_float >= 100){
+          nbr_decimal3 = 0;
+        }
+        else{
+          nbr_decimal3 = 1;
+        }
+        if(value4_float >= 100){
+          nbr_decimal4 = 0;
+        }
+        else{
+          nbr_decimal4 = 1;
+        } 
 
         DisplayPage();        
 }
@@ -1353,11 +1444,20 @@ void page5(){
         strcpy(title1,"Max_Pwr");
         strcpy(title2,"Power");
         strcpy(title3,"BattMinT");
-        strcpy(title4,"SoC");
-        dtostrf(Max_Pwr,3,0,value1);
-        dtostrf(Power,3,1,value2);
-        dtostrf(BattMinT,3,1,value3);
-        dtostrf(SoC,3,1,value4);
+        strcpy(title4,"SoC");        
+        value1_float = Max_Pwr;
+        value2_float = Power;
+        value3_float = BattMinT;
+        value4_float = SoC;
+        nbr_decimal1 = 0;
+        if(value2_float >= 100){
+          nbr_decimal2 = 0;
+        }
+        else{
+          nbr_decimal2 = 1;
+        }        
+        nbr_decimal3 = 1;
+        nbr_decimal4 = 1;
 
         DisplayPage();        
 }
@@ -1369,11 +1469,20 @@ void page6(){
         strcpy(title1,"Trip_kWh");
         strcpy(title2,"TripOdo");
         strcpy(title3,"TripSoC");
-        strcpy(title4,"AuxBattSoC");
-        dtostrf(CurrNet_kWh,3,1,value1);
-        dtostrf(CurrTripOdo,3,0,value2);
-        dtostrf(CurrUsedSoC,3,1,value3);
-        dtostrf(AuxBattSoC,3,1,value4);
+        strcpy(title4,"AuxBattSoC");        
+        value1_float = CurrNet_kWh;
+        value2_float = CurrTripOdo;
+        value3_float = CurrUsedSoC;
+        value4_float = AuxBattSoC;
+        nbr_decimal1 = 1;
+        nbr_decimal2 = 0;
+        nbr_decimal3 = 1;        
+        if(value4_float >= 100){
+          nbr_decimal4 = 0;
+        }
+        else{
+          nbr_decimal4 = 1;
+        }        
 
         DisplayPage();            
 }
@@ -1385,11 +1494,20 @@ void page7(){
         strcpy(title1,"BmsSoC");
         strcpy(title2,"MAXcellv");
         strcpy(title3,"CellVdiff");
-        strcpy(title4,"SOH");
-        dtostrf(BmsSoC,3,1,value1);
-        dtostrf(MAXcellv,3,2,value2);
-        dtostrf(CellVdiff,3,2,value3);
-        dtostrf(SOH,3,0,value4);
+        strcpy(title4,"SOH");        
+        value1_float = BmsSoC;
+        value2_float = MAXcellv;
+        value3_float = CellVdiff;
+        value4_float = SOH;
+        nbr_decimal1 = 1;
+        nbr_decimal2 = 2;
+        nbr_decimal3 = 2;
+        if(value4_float >= 100){
+          nbr_decimal4 = 0;
+        }
+        else{
+          nbr_decimal4 = 1;
+        }
 
         DisplayPage();        
 }
